@@ -1,0 +1,268 @@
+
+import React, { useState, useEffect } from 'react';
+import { Search, Calendar, User, Truck, FileText, Printer, Loader2, Filter, ArrowRight, MapPin, Clock, Building2 } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../supabase';
+import { Branch } from '../types';
+
+interface TripAuditRecord {
+  movement_id: string;
+  batch_id: string;
+  movement_time: string;
+  transaction_date: string;
+  quantity: number;
+  condition: string;
+  route_instructions: string | null;
+  from_location: string;
+  to_location: string;
+  driver_name: string;
+  truck_plate: string;
+  branch_id: string;
+  shift_start: string | null;
+  shift_end: string | null;
+  manual_end_time: string | null;
+  shift_notes: string | null;
+}
+
+const TripAuditTrail: React.FC = () => {
+  const [records, setRecords] = useState<TripAuditRecord[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    startDate: '2025-07-01',
+    endDate: new Date().toISOString().split('T')[0],
+    driverName: '',
+    truckPlate: '',
+    branchId: ''
+  });
+
+  const fetchData = async () => {
+    if (!isSupabaseConfigured) {
+      setRecords([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Fetch branches for dropdown
+      const { data: branchData } = await supabase.from('branches').select('*').order('name');
+      if (branchData) setBranches(branchData);
+
+      let query = supabase
+        .from('vw_trip_audit_trail')
+        .select('*')
+        .gte('transaction_date', filters.startDate)
+        .lte('transaction_date', filters.endDate);
+
+      if (filters.driverName) {
+        query = query.ilike('driver_name', `%${filters.driverName}%`);
+      }
+      if (filters.truckPlate) {
+        query = query.ilike('truck_plate', `%${filters.truckPlate}%`);
+      }
+      if (filters.branchId) {
+        query = query.eq('branch_id', filters.branchId);
+      }
+
+      const { data, error } = await query.order('transaction_date', { ascending: false });
+
+      if (error) throw error;
+      setRecords(data || []);
+    } catch (err) {
+      console.error("Error fetching trip audit trail:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="space-y-8 pb-20">
+      {/* Filters Section */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-6 print:hidden">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-slate-900 text-white rounded-xl shadow-lg">
+              <Filter size={20} />
+            </div>
+            <div>
+              <h3 className="font-black text-xl text-slate-900 uppercase tracking-tight">Audit Filters</h3>
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">High-Volume Trip Auditing</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={fetchData}
+              className="px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center gap-2"
+            >
+              <Search size={16} /> Apply Filters
+            </button>
+            <button 
+              onClick={handlePrint}
+              className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 flex items-center gap-2"
+            >
+              <Printer size={16} /> Print Audit Report
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <Calendar size={12} /> From Date
+            </label>
+            <input 
+              type="date"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+              value={filters.startDate}
+              onChange={e => setFilters({...filters, startDate: e.target.value})}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <Calendar size={12} /> To Date
+            </label>
+            <input 
+              type="date"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+              value={filters.endDate}
+              onChange={e => setFilters({...filters, endDate: e.target.value})}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <Building2 size={12} /> Branch
+            </label>
+            <select 
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+              value={filters.branchId}
+              onChange={e => setFilters({...filters, branchId: e.target.value})}
+            >
+              <option value="">All Branches</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <User size={12} /> Driver
+            </label>
+            <input 
+              type="text"
+              placeholder="Search driver..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+              value={filters.driverName}
+              onChange={e => setFilters({...filters, driverName: e.target.value})}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <Truck size={12} /> Truck
+            </label>
+            <input 
+              type="text"
+              placeholder="Search truck..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+              value={filters.truckPlate}
+              onChange={e => setFilters({...filters, truckPlate: e.target.value})}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Report Header for Print */}
+      <div className="hidden print:block mb-8 border-b-4 border-slate-900 pb-6">
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">THE SHUKU FAMILY: TRIP AUDIT LOG</h1>
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Logistics Intelligence & Forensic Audit</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Printed On</p>
+            <p className="text-sm font-bold text-slate-900">{new Date().toLocaleString()}</p>
+          </div>
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-8">
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selected Date Range</p>
+            <p className="text-sm font-bold text-slate-900">{filters.startDate} to {filters.endDate}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Records</p>
+            <p className="text-sm font-bold text-slate-900">{records.length} Trips</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Results Section */}
+      <div className="space-y-4">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+            <Loader2 className="animate-spin text-slate-300 mb-4" size={48} />
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Compiling Audit Trail...</p>
+          </div>
+        ) : records.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+            <FileText className="text-slate-200 mb-4" size={48} />
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No trips found for selected criteria</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-900 text-white print:bg-slate-100 print:text-slate-900">
+                <tr>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Date</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Driver</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Truck</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Origin</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Destination</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Qty</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Route/Instructions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {records.map((record) => (
+                  <tr key={record.movement_id} className="hover:bg-slate-50 transition-colors break-inside-avoid">
+                    <td className="px-6 py-4 text-xs font-bold text-slate-900 whitespace-nowrap">
+                      {new Date(record.transaction_date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-900">
+                      {record.driver_name}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-900">
+                      {record.truck_plate}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-600">
+                      {record.from_location}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-600">
+                      {record.to_location}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-black text-emerald-600">
+                      {record.quantity}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-500 italic leading-relaxed min-w-[200px]">
+                      <div className="whitespace-normal break-words">
+                        {record.route_instructions || '-'}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default TripAuditTrail;

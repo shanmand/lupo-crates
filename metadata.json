@@ -1,0 +1,8 @@
+{
+  "name": "SHUKU Equipment Tracking",
+  "description": "Enterprise industrial asset tracking system for SHUKU Crates and Pallets, licensed to Lupo Bakery Proprietary Limited.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

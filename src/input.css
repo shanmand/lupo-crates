@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@media print {
+  .print\:hidden {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  aside, header, .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  th, td {
+    border: 1px solid #e2e8f0 !important;
+    padding: 8px !important;
+    text-align: left !important;
+  }
+  .break-inside-avoid {
+    break-inside: avoid !important;
+  }
+}
