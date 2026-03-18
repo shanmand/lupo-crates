@@ -75,6 +75,7 @@ CREATE TABLE public.trucks (
     plate_number TEXT NOT NULL UNIQUE,
     license_disc_expiry DATE,
     last_renewal_cost_zar NUMERIC DEFAULT 0,
+    license_doc_url TEXT,
     branch_id TEXT REFERENCES public.branches(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -777,8 +778,23 @@ INSERT INTO public.branches (id, name) VALUES ('BR-01', 'Kya Sands'), ('BR-02', 
 INSERT INTO public.locations (id, name, type, category, branch_id, partner_type) VALUES 
 ('LOC-JHB-01', 'Lupo JHB Main Plant (Kya Sands)', 'Crates Dept', 'Home', 'BR-01', 'Internal'),
 ('LOC-DBN-01', 'Lupo Durban Plant', 'Crates Dept', 'Home', 'BR-02', 'Internal'),
+('LOC-JHB-WH1', 'Kya Sands Warehouse 1', 'Warehouse', 'Internal', 'BR-01', 'Internal'),
+('LOC-JHB-WH2', 'Kya Sands Warehouse 2', 'Warehouse', 'Internal', 'BR-01', 'Internal'),
 ('LOC-SUP-01', 'Crate Suppliers JHB', 'Supplier', 'External', 'BR-01', 'Supplier'),
-('LOC-CUST-01', 'Checkers Hyper Sandton', 'Customer', 'External', 'BR-01', 'Customer')
+('LOC-CUST-01', 'Checkers Hyper Sandton', 'Customer', 'External', 'BR-01', 'Customer'),
+('LOC-TRANSIT-01', 'In Transit JHB', 'In Transit', 'Internal', 'BR-01', 'Internal')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.trucks (id, plate_number, branch_id) VALUES 
+('TRK-001', 'GP 123 SH', 'BR-01'),
+('TRK-002', 'GP 456 SH', 'BR-01'),
+('TRK-003', 'ND 789 DBN', 'BR-02')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.drivers (id, full_name, branch_id) VALUES 
+('DRV-001', 'John Doe', 'BR-01'),
+('DRV-002', 'Jane Smith', 'BR-01'),
+('DRV-003', 'Sipho Zulu', 'BR-02')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.asset_master (id, name, type, dimensions, material, supplier_id) VALUES 
@@ -838,6 +854,67 @@ FROM public.truck_roadworthy_history rh
 JOIN public.trucks t ON rh.truck_id::text = t.id::text
 JOIN public.branches b ON t.branch_id = b.id;
 
+-- Fleet Compliance Alerts View
+CREATE OR REPLACE VIEW public.vw_fleet_compliance_alerts AS
+SELECT 
+    t.id as truck_id,
+    t.plate_number,
+    t.license_disc_expiry as license_expiry,
+    d.id as driver_id,
+    d.full_name as driver_name,
+    d.license_expiry as driver_license_expiry,
+    d.prdp_expiry,
+    CASE 
+        WHEN t.license_disc_expiry < CURRENT_DATE THEN 'Expired'
+        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '30 days' THEN 'Critical'
+        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '90 days' THEN 'Warning'
+        ELSE 'Valid'
+    END as truck_status,
+    CASE 
+        WHEN d.license_expiry < CURRENT_DATE OR d.prdp_expiry < CURRENT_DATE THEN 'Expired'
+        WHEN d.license_expiry < CURRENT_DATE + INTERVAL '30 days' OR d.prdp_expiry < CURRENT_DATE + INTERVAL '30 days' THEN 'Critical'
+        ELSE 'Valid'
+    END as driver_status
+FROM public.trucks t
+LEFT JOIN public.drivers d ON t.branch_id = d.branch_id;
+
+-- Fleet Readiness View
+CREATE OR REPLACE VIEW public.vw_fleet_readiness AS
+SELECT 
+    t.id as truck_id,
+    t.plate_number,
+    t.branch_id,
+    b.name as branch_name,
+    t.license_disc_expiry,
+    CASE 
+        WHEN t.license_disc_expiry < CURRENT_DATE THEN 'Expired'
+        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '30 days' THEN 'Critical'
+        WHEN t.license_disc_expiry < CURRENT_DATE + INTERVAL '90 days' THEN 'Warning'
+        ELSE 'Compliant'
+    END as license_status,
+    COALESCE(t.last_renewal_cost_zar, 0) as last_renewal_cost,
+    (
+        SELECT COALESCE(SUM(test_fee_zar + repair_costs_zar), 0)
+        FROM public.truck_roadworthy_history
+        WHERE truck_id = t.id AND test_date >= DATE_TRUNC('year', CURRENT_DATE)
+    ) as ytd_roadworthy_costs,
+    (
+        SELECT result
+        FROM public.truck_roadworthy_history
+        WHERE truck_id = t.id
+        ORDER BY test_date DESC
+        LIMIT 1
+    ) as last_roadworthy_result,
+    (
+        SELECT expiry_date
+        FROM public.truck_roadworthy_history
+        WHERE truck_id = t.id
+        ORDER BY test_date DESC
+        LIMIT 1
+    ) as roadworthy_expiry
+FROM public.trucks t
+LEFT JOIN public.branches b ON t.branch_id = b.id;
+
 CREATE OR REPLACE VIEW public.vw_all_origins AS
 SELECT * FROM public.vw_all_sources
 ORDER BY sort_group, name;
@@ -858,38 +935,43 @@ ON CONFLICT DO NOTHING;
 
 -- 18. Management Reporting Views
 CREATE OR REPLACE VIEW public.vw_all_sources AS
-WITH combined AS (
-    SELECT 
-        id,
-        name,
-        partner_type,
-        branch_id,
-        name || ' (' || partner_type || ')' as display_name,
-        CASE WHEN partner_type = 'Internal' THEN 1 ELSE 2 END as sort_group
-    FROM public.locations
-    WHERE type != 'In Transit'
-    UNION ALL
-    SELECT 
-        id::text,
-        name,
-        party_type as partner_type,
-        NULL as branch_id,
-        name || ' (' || party_type || ')' as display_name,
-        2 as sort_group
-    FROM public.business_parties
-)
-SELECT * FROM (
-    SELECT DISTINCT ON (id)
-        id,
-        name,
-        partner_type,
-        branch_id,
-        display_name,
-        sort_group
-    FROM combined
-    ORDER BY id, sort_group ASC
-) sub
-ORDER BY sort_group ASC, name ASC;
+SELECT 
+    id,
+    name,
+    partner_type,
+    branch_id,
+    type,
+    category,
+    name || ' (' || partner_type || ')' as display_name,
+    CASE 
+        WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
+        WHEN type = 'In Transit' THEN 3
+        ELSE 2 
+    END as sort_group
+FROM public.locations
+UNION ALL
+SELECT 
+    id::text,
+    name,
+    party_type as partner_type,
+    NULL as branch_id,
+    'Business Party' as type,
+    'External' as category,
+    name || ' (' || party_type || ')' as display_name,
+    2 as sort_group
+FROM public.business_parties;
+
+-- Update vw_all_origins to be consistent
+DROP VIEW IF EXISTS public.vw_all_origins CASCADE;
+CREATE OR REPLACE VIEW public.vw_all_origins AS
+SELECT * FROM public.vw_all_sources
+ORDER BY sort_group, name;
+
+-- Update vw_movement_destinations to be consistent
+DROP VIEW IF EXISTS public.vw_movement_destinations CASCADE;
+CREATE OR REPLACE VIEW public.vw_movement_destinations AS
+SELECT * FROM public.vw_all_sources
+ORDER BY sort_group, name;
 
 -- Relax foreign key on batches to allow business party IDs
 ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS batches_current_location_id_fkey;
@@ -968,7 +1050,7 @@ SELECT
 FROM public.batches b
 LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 INSERT INTO public.fee_schedule (asset_id, fee_type, amount_zar, effective_from) VALUES 
-('SH-001', 'Daily Rental (Standard)', 5.50, '2026-01-01'),
+('SH-001', 'Daily Rental (Supermarket)', 5.50, '2026-01-01'),
 ('SH-P01', 'Replacement Fee (Lost Equipment)', 1200.00, '2026-01-01')
 ON CONFLICT DO NOTHING;
 

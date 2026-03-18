@@ -91,7 +91,9 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
         locations: locsRes.data?.length,
         origins: originsRes.data?.length,
         destinations: destsRes.data?.length,
-        batches: batchesRes.data?.length
+        batches: batchesRes.data?.length,
+        trucks: trucksRes.data?.length,
+        drivers: driversRes.data?.length
       });
 
       if (shiftsRes.data) setActiveShifts(shiftsRes.data);
@@ -443,7 +445,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     onChange={e => setOrigin(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {locations.filter(l => l.category === 'Home').map(l => <option key={`origin-home-${l.id}`} value={l.id}>{l.name}</option>)}
+                      {locations.filter(l => l.partner_type === 'Internal').map(l => <option key={`origin-home-${l.id}`} value={l.id}>{l.name}</option>)}
                     </optgroup>
                     <optgroup label="Customers & Partners">
                       {!isInternal && origins
@@ -466,7 +468,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     onChange={e => setDestination(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {locations.filter(l => l.category === 'Home').map(l => <option key={`dest-home-${l.id}`} value={l.id}>{l.name}</option>)}
+                      {locations.filter(l => l.partner_type === 'Internal').map(l => <option key={`dest-home-${l.id}`} value={l.id}>{l.name}</option>)}
                     </optgroup>
                     <optgroup label="Customers & Partners">
                       {!isInternal && destinations
