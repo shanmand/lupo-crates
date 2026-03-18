@@ -781,8 +781,10 @@ INSERT INTO public.locations (id, name, type, category, branch_id, partner_type)
 ('LOC-JHB-WH1', 'Kya Sands Warehouse 1', 'Warehouse', 'Internal', 'BR-01', 'Internal'),
 ('LOC-JHB-WH2', 'Kya Sands Warehouse 2', 'Warehouse', 'Internal', 'BR-01', 'Internal'),
 ('LOC-SUP-01', 'Crate Suppliers JHB', 'Supplier', 'External', 'BR-01', 'Supplier'),
-('LOC-CUST-01', 'Checkers Hyper Sandton', 'Customer', 'External', 'BR-01', 'Customer'),
-('LOC-TRANSIT-01', 'In Transit JHB', 'In Transit', 'Internal', 'BR-01', 'Internal')
+('LOC-CUST-01', 'Checkers Hyper Sandton', 'At Customer', 'External', 'BR-01', 'Customer'),
+('LOC-TRANSIT-01', 'Truck GP 123 SH (JHB)', 'In Transit', 'Internal', 'BR-01', 'Internal'),
+('LOC-TRANSIT-02', 'Truck GP 456 SH (JHB)', 'In Transit', 'Internal', 'BR-01', 'Internal'),
+('LOC-TRANSIT-03', 'Truck ND 789 DBN (DBN)', 'In Transit', 'Internal', 'BR-02', 'Internal')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.trucks (id, plate_number, branch_id) VALUES 

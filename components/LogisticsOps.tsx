@@ -77,7 +77,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
     try {
       console.log('LogisticsOps: Fetching data...');
       const [locsRes, originsRes, destsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes] = await Promise.all([
-        supabase.from('locations').select('*'),
+        supabase.from('vw_all_sources').select('*'),
         supabase.from('vw_all_origins').select('*'),
         supabase.from('vw_movement_destinations').select('*'),
         supabase.from('batches').select('*'),
@@ -88,7 +88,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
       ]);
 
       console.log('LogisticsOps Data Received:', {
-        locations: locsRes.data?.length,
+        sources: locsRes.data?.length,
         origins: originsRes.data?.length,
         destinations: destsRes.data?.length,
         batches: batchesRes.data?.length,
@@ -96,10 +96,15 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
         drivers: driversRes.data?.length
       });
 
+      if (originsRes.data) {
+        console.log('Origins Sample:', originsRes.data.slice(0, 3));
+        console.log('Origins Types:', [...new Set(originsRes.data.map(o => o.type))]);
+      }
+
       if (shiftsRes.data) setActiveShifts(shiftsRes.data);
       if (locsRes.data) {
         const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
-        setLocations(uniqueLocs);
+        setLocations(uniqueLocs as any);
       }
       if (originsRes.data) {
         const uniqueOrigins = Array.from(new Map(originsRes.data.map(item => [item.id, item])).values());
@@ -445,7 +450,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     onChange={e => setOrigin(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {locations.filter(l => l.partner_type === 'Internal').map(l => <option key={`origin-home-${l.id}`} value={l.id}>{l.name}</option>)}
+                      {origins.filter(o => o.partner_type === 'Internal' && o.type !== LocationType.IN_TRANSIT).map(o => <option key={`origin-home-${o.id}`} value={o.id}>{o.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Customers & Partners">
                       {!isInternal && origins
@@ -468,7 +473,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     onChange={e => setDestination(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {locations.filter(l => l.partner_type === 'Internal').map(l => <option key={`dest-home-${l.id}`} value={l.id}>{l.name}</option>)}
+                      {destinations.filter(d => d.partner_type === 'Internal' && d.type !== LocationType.IN_TRANSIT).map(d => <option key={`dest-home-${d.id}`} value={d.id}>{d.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Customers & Partners">
                       {!isInternal && destinations
