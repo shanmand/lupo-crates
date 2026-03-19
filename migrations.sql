@@ -616,37 +616,57 @@ FROM public.batches b
 LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 -- ==========================================
--- 15. Relax Foreign Key Constraints
--- ==========================================
-
-DO $$ 
-DECLARE 
-    r RECORD;
-BEGIN
-    -- Drop all foreign key constraints on batches(current_location_id)
-    FOR r IN (
-        SELECT constraint_name 
-        FROM information_schema.key_column_usage 
-        WHERE table_name = 'batches' AND column_name = 'current_location_id'
-    ) LOOP
-        EXECUTE 'ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
-    END LOOP;
-
-    -- Drop all foreign key constraints on batch_movements(from_location_id)
-    FOR r IN (
-        SELECT constraint_name 
-        FROM information_schema.key_column_usage 
-        WHERE table_name = 'batch_movements' AND column_name = 'from_location_id'
-    ) LOOP
-        EXECUTE 'ALTER TABLE public.batch_movements DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
-    END LOOP;
-
-    -- Drop all foreign key constraints on batch_movements(to_location_id)
-    FOR r IN (
-        SELECT constraint_name 
-        FROM information_schema.key_column_usage 
-        WHERE table_name = 'batch_movements' AND column_name = 'to_location_id'
-    ) LOOP
-        EXECUTE 'ALTER TABLE public.batch_movements DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
-    END LOOP;
-END $$;
+-- 16. Executive Report View
+CREATE OR REPLACE VIEW public.vw_executive_report AS
+WITH branch_metrics AS (
+    SELECT 
+        b.id as branch_id,
+        b.name as branch_name,
+        -- Total units currently managed by this branch
+        COALESCE(SUM(bt.quantity), 0) as total_units,
+        -- Stagnant units (> 14 days)
+        COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 14 AND bt.transfer_confirmed_by_customer = false THEN bt.quantity ELSE 0 END), 0) as stagnant_units,
+        -- Financial Drainage (> 21 days)
+        COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 21 AND bt.transfer_confirmed_by_customer = false THEN public.calculate_batch_accrual(bt.id) ELSE 0 END), 0) as financial_drainage,
+        -- Loss Count (from asset_losses)
+        (
+            SELECT COALESCE(SUM(al.lost_quantity), 0)
+            FROM public.asset_losses al
+            JOIN public.locations l ON al.last_known_location_id = l.id
+            WHERE l.branch_id = b.id
+        ) as lost_units
+    FROM public.branches b
+    LEFT JOIN public.locations loc ON b.id = loc.branch_id
+    LEFT JOIN public.batches bt ON loc.id = bt.current_location_id
+    GROUP BY b.id, b.name
+),
+forensics AS (
+    -- Get the oldest stagnant batch for each branch
+    SELECT DISTINCT ON (l.branch_id)
+        l.branch_id,
+        bm.driver_id,
+        d.full_name as driver_name,
+        l.name as last_location,
+        bt.id as batch_id,
+        bt.transaction_date
+    FROM public.batches bt
+    JOIN public.locations l ON bt.current_location_id = l.id
+    LEFT JOIN public.batch_movements bm ON bt.id = bm.batch_id
+    LEFT JOIN public.drivers d ON bm.driver_id = d.id
+    WHERE (CURRENT_DATE - bt.transaction_date) > 14 
+      AND bt.transfer_confirmed_by_customer = false
+    ORDER BY l.branch_id, bt.transaction_date ASC, bm.timestamp DESC
+)
+SELECT 
+    m.branch_id,
+    m.branch_name,
+    m.total_units,
+    m.stagnant_units,
+    m.financial_drainage,
+    m.lost_units,
+    CASE WHEN (m.total_units + m.lost_units) > 0 THEN (m.lost_units::float / (m.total_units + m.lost_units)) * 100 ELSE 0 END as loss_ratio,
+    f.driver_name as oldest_stagnant_driver,
+    f.last_location as oldest_stagnant_location,
+    f.batch_id as oldest_stagnant_batch_id
+FROM branch_metrics m
+LEFT JOIN forensics f ON m.branch_id = f.branch_id;

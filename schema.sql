@@ -5,6 +5,7 @@
 -- ==========================================
 
 -- 1. CLEANUP (DROP EVERYTHING)
+DROP VIEW IF EXISTS public.vw_executive_report CASCADE;
 DROP VIEW IF EXISTS public.vw_daily_burn_rate CASCADE;
 DROP TABLE IF EXISTS public.stock_take_items CASCADE;
 DROP TABLE IF EXISTS public.stock_takes CASCADE;
@@ -1111,7 +1112,21 @@ ON CONFLICT DO NOTHING;
 -- Seed Disputed Batches & Claims
 INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date) VALUES 
 ('B-DISP-001', 'SH-001', 50, 'LOC-CUST-01', 'Disputed', '2026-03-01'),
-('B-DISP-002', 'SH-P01', 10, 'LOC-CUST-01', 'Disputed', '2026-03-05')
+('B-DISP-002', 'SH-P01', 10, 'LOC-CUST-01', 'Disputed', '2026-03-05'),
+('B-STAG-001', 'SH-001', 120, 'LOC-JHB-01', 'Success', CURRENT_DATE - INTERVAL '25 days'),
+('B-STAG-002', 'SH-P01', 45, 'LOC-DBN-01', 'Success', CURRENT_DATE - INTERVAL '30 days'),
+('B-STAG-003', 'SH-001', 85, 'LOC-JHB-WH1', 'Success', CURRENT_DATE - INTERVAL '18 days')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.batch_movements (batch_id, from_location_id, to_location_id, truck_id, driver_id, condition, origin_user_id, quantity, transaction_date) VALUES 
+('B-STAG-001', 'LOC-SUP-01', 'LOC-JHB-01', 'TRK-001', 'DRV-001', 'Clean', NULL, 120, CURRENT_DATE - INTERVAL '25 days'),
+('B-STAG-002', 'LOC-SUP-01', 'LOC-DBN-01', 'TRK-003', 'DRV-003', 'Clean', NULL, 45, CURRENT_DATE - INTERVAL '30 days'),
+('B-STAG-003', 'LOC-SUP-01', 'LOC-JHB-WH1', 'TRK-002', 'DRV-002', 'Clean', NULL, 85, CURRENT_DATE - INTERVAL '18 days')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.asset_losses (batch_id, loss_type, lost_quantity, last_known_location_id, transaction_date) VALUES 
+('B-STAG-001', 'Shrinkage', 5, 'LOC-JHB-01', CURRENT_DATE - INTERVAL '5 days'),
+('B-STAG-002', 'Damaged', 2, 'LOC-DBN-01', CURRENT_DATE - INTERVAL '10 days')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.claims (id, batch_id, type, amount_claimed_zar, status) VALUES 
@@ -1157,3 +1172,58 @@ LEFT JOIN LATERAL (
     ORDER BY s.start_time DESC
     LIMIT 1
 ) ds ON true;
+
+-- Executive Report View
+CREATE OR REPLACE VIEW public.vw_executive_report AS
+WITH branch_metrics AS (
+    SELECT 
+        b.id as branch_id,
+        b.name as branch_name,
+        -- Total units currently managed by this branch
+        COALESCE(SUM(bt.quantity), 0) as total_units,
+        -- Stagnant units (> 14 days)
+        COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 14 AND bt.transfer_confirmed_by_customer = false THEN bt.quantity ELSE 0 END), 0) as stagnant_units,
+        -- Financial Drainage (> 21 days)
+        COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 21 AND bt.transfer_confirmed_by_customer = false THEN public.calculate_batch_accrual(bt.id) ELSE 0 END), 0) as financial_drainage,
+        -- Loss Count (from asset_losses)
+        (
+            SELECT COALESCE(SUM(al.lost_quantity), 0)
+            FROM public.asset_losses al
+            JOIN public.locations l ON al.last_known_location_id = l.id
+            WHERE l.branch_id = b.id
+        ) as lost_units
+    FROM public.branches b
+    LEFT JOIN public.locations loc ON b.id = loc.branch_id
+    LEFT JOIN public.batches bt ON loc.id = bt.current_location_id
+    GROUP BY b.id, b.name
+),
+forensics AS (
+    -- Get the oldest stagnant batch for each branch
+    SELECT DISTINCT ON (l.branch_id)
+        l.branch_id,
+        bm.driver_id,
+        d.full_name as driver_name,
+        l.name as last_location,
+        bt.id as batch_id,
+        bt.transaction_date
+    FROM public.batches bt
+    JOIN public.locations l ON bt.current_location_id = l.id
+    LEFT JOIN public.batch_movements bm ON bt.id = bm.batch_id
+    LEFT JOIN public.drivers d ON bm.driver_id = d.id
+    WHERE (CURRENT_DATE - bt.transaction_date) > 14 
+      AND bt.transfer_confirmed_by_customer = false
+    ORDER BY l.branch_id, bt.transaction_date ASC, bm.timestamp DESC
+)
+SELECT 
+    m.branch_id,
+    m.branch_name,
+    m.total_units,
+    m.stagnant_units,
+    m.financial_drainage,
+    m.lost_units,
+    CASE WHEN (m.total_units + m.lost_units) > 0 THEN (m.lost_units::float / (m.total_units + m.lost_units)) * 100 ELSE 0 END as loss_ratio,
+    f.driver_name as oldest_stagnant_driver,
+    f.last_location as oldest_stagnant_location,
+    f.batch_id as oldest_stagnant_batch_id
+FROM branch_metrics m
+LEFT JOIN forensics f ON m.branch_id = f.branch_id;
