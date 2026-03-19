@@ -193,6 +193,30 @@ CREATE TABLE public.batches (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE public.trips (
+    id TEXT PRIMARY KEY, -- e.g. TRIP-20240319-001
+    driver_id TEXT REFERENCES public.drivers(id),
+    truck_id TEXT REFERENCES public.trucks(id),
+    route_name TEXT,
+    status TEXT DEFAULT 'Planned', -- Planned, In Progress, Completed, Cancelled
+    start_time TIMESTAMPTZ,
+    end_time TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.trip_stops (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trip_id TEXT REFERENCES public.trips(id) ON DELETE CASCADE,
+    location_id TEXT, -- FK to locations or business_parties
+    sequence_number INTEGER NOT NULL,
+    planned_arrival TIMESTAMPTZ,
+    actual_arrival TIMESTAMPTZ,
+    actual_departure TIMESTAMPTZ,
+    status TEXT DEFAULT 'Pending', -- Pending, Arrived, Departed, Skipped
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE public.batch_movements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     batch_id TEXT REFERENCES public.batches(id),
@@ -200,6 +224,8 @@ CREATE TABLE public.batch_movements (
     to_location_id TEXT,   -- Relaxed to accept both locations and business parties
     truck_id TEXT REFERENCES public.trucks(id),
     driver_id TEXT REFERENCES public.drivers(id),
+    trip_id TEXT REFERENCES public.trips(id), -- Link movement to a trip
+    trip_stop_id UUID REFERENCES public.trip_stops(id), -- Link movement to a specific stop
     condition TEXT DEFAULT 'Clean',
     route_instructions TEXT,
     origin_user_id UUID REFERENCES public.users(id),
@@ -247,7 +273,7 @@ CREATE TABLE public.claims (
 );
 
 CREATE TABLE public.business_parties (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     party_type TEXT NOT NULL, -- Customer, Supplier
     contact_person TEXT,
@@ -980,18 +1006,18 @@ ORDER BY sort_group, name;
 CREATE OR REPLACE VIEW public.vw_dashboard_stats AS
 WITH stats AS (
     SELECT
-        SUM(CASE WHEN s.category = 'Home' AND s.type != 'In Transit' THEN b.quantity ELSE 0 END) as available,
-        SUM(CASE WHEN s.partner_type = 'Customer' THEN b.quantity ELSE 0 END) as at_customers,
-        SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END) as in_transit,
-        SUM(CASE WHEN b.status = 'Maintenance' THEN b.quantity ELSE 0 END) as maintenance,
-        SUM(b.quantity) as total_fleet,
+        COALESCE(SUM(CASE WHEN s.category = 'Home' AND s.type != 'In Transit' THEN b.quantity ELSE 0 END), 0) as available,
+        COALESCE(SUM(CASE WHEN s.partner_type = 'Customer' THEN b.quantity ELSE 0 END), 0) as at_customers,
+        COALESCE(SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END), 0) as in_transit,
+        COALESCE(SUM(CASE WHEN b.status = 'Maintenance' THEN b.quantity ELSE 0 END), 0) as maintenance,
+        COALESCE(SUM(b.quantity), 0) as total_fleet,
         -- Financial Alerts
-        SUM(CASE WHEN b.status = 'Lost' THEN b.quantity ELSE 0 END) as lost_missing,
-        SUM(CASE WHEN b.status = 'Damaged' THEN b.quantity ELSE 0 END) as damaged,
-        SUM(public.calculate_batch_accrual(b.id)) as pending_charges,
+        COALESCE(SUM(CASE WHEN b.status = 'Lost' THEN b.quantity ELSE 0 END), 0) as lost_missing,
+        COALESCE(SUM(CASE WHEN b.status = 'Damaged' THEN b.quantity ELSE 0 END), 0) as damaged,
+        COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as pending_charges,
         (SELECT COUNT(*) FROM public.asset_losses WHERE is_settled = FALSE) as open_loss_cases,
         -- Liability
-        SUM(public.calculate_batch_accrual(b.id)) as accrued_rental,
+        COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as accrued_rental,
         (SELECT COALESCE(SUM(net_payable), 0) FROM public.settlements) as settlement_liability,
         (SELECT COUNT(DISTINCT id) FROM public.locations WHERE partner_type = 'Customer') as active_customers,
         (SELECT COALESCE(SUM(quantity), 0) FROM public.batch_movements WHERE transaction_date = CURRENT_DATE) as movements_today

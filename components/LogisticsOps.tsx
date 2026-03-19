@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User as UserIcon, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock, Info } from 'lucide-react';
+import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User as UserIcon, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock, Info, History as HistoryIcon } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS, MOCK_TRUCKS, MOCK_DRIVERS } from '../constants';
-import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement, MovementDestination } from '../types';
+import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement, MovementDestination, Trip, TripStop } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { normalizePayload, castId } from '../supabaseUtils';
 
@@ -27,12 +27,16 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>([]);
   const [activeShifts, setActiveShifts] = useState<{driver_id: string, truck_id: string}[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [tripStops, setTripStops] = useState<TripStop[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState(''); 
   const [truckId, setTruckId] = useState('');
   const [driverId, setDriverId] = useState('');
+  const [selectedTripId, setSelectedTripId] = useState('');
+  const [selectedStopId, setSelectedStopId] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [assets, setAssets] = useState<{ assetId: string, quantity: number, batchId?: string }[]>([]);
   const [condition, setCondition] = useState(MovementCondition.CLEAN);
@@ -76,7 +80,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
     setIsLoading(true);
     try {
       console.log('LogisticsOps: Fetching data...');
-      const [locsRes, originsRes, destsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes] = await Promise.all([
+      const [locsRes, originsRes, destsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes, tripsRes] = await Promise.all([
         supabase.from('vw_all_sources').select('*'),
         supabase.from('vw_all_origins').select('*'),
         supabase.from('vw_movement_destinations').select('*'),
@@ -84,7 +88,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
         supabase.from('trucks').select('*'),
         supabase.from('drivers').select('*'),
         supabase.from('asset_master').select('*'),
-        supabase.from('driver_shifts').select('driver_id, truck_id').is('end_time', null)
+        supabase.from('driver_shifts').select('driver_id, truck_id').is('end_time', null),
+        supabase.from('trips').select('*').in('status', ['Planned', 'In Progress'])
       ]);
 
       console.log('LogisticsOps Data Received:', {
@@ -102,6 +107,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
       }
 
       if (shiftsRes.data) setActiveShifts(shiftsRes.data);
+      if (tripsRes.data) setTrips(tripsRes.data);
       if (locsRes.data) {
         const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
         setLocations(uniqueLocs as any);
@@ -184,6 +190,27 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
     const shift = activeShifts.find(s => s.driver_id === id);
     if (shift) {
       setTruckId(shift.truck_id);
+    }
+  };
+
+  const handleTripChange = async (tripId: string) => {
+    setSelectedTripId(tripId);
+    setSelectedStopId('');
+    if (tripId) {
+      const { data } = await supabase
+        .from('trip_stops')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('sequence_number', { ascending: true });
+      if (data) setTripStops(data);
+      
+      const trip = trips.find(t => t.id === tripId);
+      if (trip) {
+        setDriverId(trip.driver_id);
+        setTruckId(trip.truck_id);
+      }
+    } else {
+      setTripStops([]);
     }
   };
 
@@ -289,6 +316,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
             to_location_id: destination,
             truck_id: isInternal ? null : truckId,
             driver_id: isInternal ? null : driverId,
+            trip_id: selectedTripId || null,
+            trip_stop_id: selectedStopId || null,
             quantity: item.quantity,
             route_instructions: routeInstructions,
             timestamp: new Date(movementDate).toISOString(),
@@ -438,6 +467,41 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
             </div>
 
             <form onSubmit={handleCaptureMovement} className="p-8 space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                    <HistoryIcon size={14} className="text-indigo-500" /> Active Trip (Optional)
+                  </span>
+                  <select 
+                    disabled={isReadOnly}
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-slate-50 outline-none"
+                    value={selectedTripId}
+                    onChange={e => handleTripChange(e.target.value)}
+                  >
+                    <option value="">No Trip Assigned</option>
+                    {trips.map(t => <option key={t.id} value={t.id}>{t.route_name} ({t.id})</option>)}
+                  </select>
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                    <MapPin size={14} className="text-indigo-500" /> Current Stop
+                  </span>
+                  <select 
+                    disabled={isReadOnly || !selectedTripId}
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-slate-50 outline-none disabled:opacity-50"
+                    value={selectedStopId}
+                    onChange={e => setSelectedStopId(e.target.value)}
+                  >
+                    <option value="">Select Stop</option>
+                    {tripStops.map(s => (
+                      <option key={s.id} value={s.id}>
+                        Stop {s.sequence_number}: {locations.find(l => l.id === s.location_id)?.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <label className="block space-y-2">
                   <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">

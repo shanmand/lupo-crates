@@ -129,20 +129,20 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
               {recentActivity.map((activity, i) => (
                 <tr key={i} className="hover:bg-slate-800/30 transition-colors group">
                   <td className="px-6 py-4 text-xs font-bold text-slate-300">
-                    {new Date(activity.date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {activity.date ? new Date(activity.date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                      activity.type.toLowerCase().includes('clean') ? 'bg-emerald-500/10 text-emerald-500' : 
-                      activity.type.toLowerCase().includes('dirty') ? 'bg-amber-500/10 text-amber-500' :
+                      (activity.type || '').toLowerCase().includes('clean') ? 'bg-emerald-500/10 text-emerald-500' : 
+                      (activity.type || '').toLowerCase().includes('dirty') ? 'bg-amber-500/10 text-amber-500' :
                       'bg-blue-500/10 text-blue-500'
                     }`}>
-                      {activity.type}
+                      {activity.type || 'Unknown'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.from_location}</td>
-                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.to_location}</td>
-                  <td className="px-6 py-4 text-xs font-black text-emerald-400 text-right tabular-nums">{activity.quantity}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.from_location || 'N/A'}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.to_location || 'N/A'}</td>
+                  <td className="px-6 py-4 text-xs font-black text-emerald-400 text-right tabular-nums">{activity.quantity || 0}</td>
                 </tr>
               ))}
               {recentActivity.length === 0 && (

@@ -32,7 +32,8 @@ import {
   ArrowDownToLine,
   Clock,
   Smartphone,
-  FileText
+  FileText,
+  Navigation
 } from 'lucide-react';
 import { UserProvider, useUser } from './UserContext';
 import DashboardView from './components/DashboardView';
@@ -70,6 +71,7 @@ import FleetExpenseReport from './components/FleetExpenseReport';
 import DriverPortal from './components/DriverPortal';
 import ManagementReportPack from './components/ManagementReportPack';
 import BatchSummaryReport from './components/BatchSummaryReport';
+import TripManagement from './components/TripManagement';
 import { useBranches } from './useBranches';
 import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
@@ -109,7 +111,8 @@ enum NavItem {
   MANAGEMENT_REPORT = 'management-report',
   BUSINESS_DIRECTORY = 'business-directory',
   BATCH_SUMMARY_REPORT = 'batch-summary-report',
-  TRIP_AUDIT = 'trip-audit'
+  TRIP_AUDIT = 'trip-audit',
+  TRIP_MANAGEMENT = 'trip-management'
 }
 
 const AppContent: React.FC = () => {
@@ -187,6 +190,7 @@ const AppContent: React.FC = () => {
       case NavItem.BUSINESS_DIRECTORY: return <BusinessDirectory />;
       case NavItem.BATCH_SUMMARY_REPORT: return <BatchSummaryReport />;
       case NavItem.TRIP_AUDIT: return <TripAuditTrail />;
+      case NavItem.TRIP_MANAGEMENT: return <TripManagement />;
       default: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} />;
     }
   };
@@ -210,6 +214,7 @@ const AppContent: React.FC = () => {
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Logistics & Ops</div>
           <SidebarButton active={activeTab === NavItem.LOGISTICS} onClick={() => { setPendingAssignment(null); setActiveTab(NavItem.LOGISTICS); }} icon={<ClipboardList size={18} />} label="Logistics Ops" />
+          <SidebarButton active={activeTab === NavItem.TRIP_MANAGEMENT} onClick={() => setActiveTab(NavItem.TRIP_MANAGEMENT)} icon={<Navigation size={18} />} label="Trip Planning" />
           <SidebarButton active={activeTab === NavItem.TRACKER} onClick={() => setActiveTab(NavItem.TRACKER)} icon={<HistoryIcon size={18} />} label="Batch Forensic" />
           <SidebarButton active={activeTab === NavItem.TRIP_AUDIT} onClick={() => setActiveTab(NavItem.TRIP_AUDIT)} icon={<HistoryIcon size={18} />} label="Trip Audit Trail" />
           <SidebarButton active={activeTab === NavItem.COLLECTION_REQUESTS} onClick={() => setActiveTab(NavItem.COLLECTION_REQUESTS)} icon={<ArrowDownToLine size={18} />} label="Collection Requests" />

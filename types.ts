@@ -442,3 +442,27 @@ export interface Discount {
   reason: string;
   created_at: string;
 }
+
+export interface Trip {
+  id: string;
+  driver_id: string;
+  truck_id: string;
+  route_name?: string;
+  status: 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
+  start_time?: string;
+  end_time?: string;
+  created_at?: string;
+}
+
+export interface TripStop {
+  id: string;
+  trip_id: string;
+  location_id: string;
+  sequence_number: number;
+  planned_arrival?: string;
+  actual_arrival?: string;
+  actual_departure?: string;
+  status: 'Pending' | 'Arrived' | 'Departed' | 'Skipped';
+  notes?: string;
+  created_at?: string;
+}
