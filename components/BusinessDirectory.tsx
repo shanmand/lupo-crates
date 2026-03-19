@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   MoreVertical,
   Briefcase,
-  Package
+  Package,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
@@ -31,6 +33,7 @@ const BusinessDirectory: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [isAdding, setIsAdding] = useState(false);
+  const [editingPartner, setEditingPartner] = useState<BusinessPartner | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +95,60 @@ const BusinessDirectory: React.FC = () => {
       setError(err.message || "Failed to add partner.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdatePartner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPartner) return;
+    
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      if (isSupabaseConfigured) {
+        const { error: updateError } = await supabase
+          .from('business_parties')
+          .update({
+            name: editingPartner.name,
+            party_type: editingPartner.party_type,
+            address: editingPartner.address
+          })
+          .eq('id', editingPartner.id);
+        
+        if (updateError) throw updateError;
+      }
+      
+      await fetchData();
+      setEditingPartner(null);
+    } catch (err: any) {
+      console.error("Update Partner Error:", err);
+      setError(err.message || "Failed to update partner.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeletePartner = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this partner? This may affect existing records.")) return;
+    
+    setIsLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error: deleteError } = await supabase
+          .from('business_parties')
+          .delete()
+          .eq('id', id);
+        
+        if (deleteError) throw deleteError;
+      }
+      
+      await fetchData();
+    } catch (err: any) {
+      console.error("Delete Partner Error:", err);
+      alert(err.message || "Failed to delete partner.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -200,9 +257,22 @@ const BusinessDirectory: React.FC = () => {
                   <p className="text-[10px] text-slate-400 uppercase font-bold">Units in System</p>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
-                    <MoreVertical size={18} />
-                  </button>
+                  <div className="flex justify-end gap-2">
+                    <button 
+                      onClick={() => setEditingPartner(partner)}
+                      className="p-2 text-slate-400 hover:text-amber-600 transition-colors"
+                      title="Edit Partner"
+                    >
+                      <Edit size={18} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeletePartner(partner.id)}
+                      className="p-2 text-slate-400 hover:text-rose-600 transition-colors"
+                      title="Delete Partner"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -299,6 +369,89 @@ const BusinessDirectory: React.FC = () => {
                 >
                   {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
                   Save Partner
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Partner Modal */}
+      {editingPartner && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in duration-200">
+            <div className="p-6 bg-slate-900 text-white">
+              <h3 className="text-lg font-bold">Edit Business Partner</h3>
+              <p className="text-xs text-slate-400">Update details for {editingPartner.name}</p>
+            </div>
+            
+            <form onSubmit={handleUpdatePartner} className="p-6 space-y-4">
+              {error && (
+                <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg flex items-center gap-2 text-rose-600 text-xs font-bold">
+                  <AlertTriangle size={14} />
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Partner ID (Read-only)</label>
+                <input 
+                  disabled
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 outline-none cursor-not-allowed"
+                  value={editingPartner.id}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Business Name</label>
+                <input 
+                  required
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  value={editingPartner.name}
+                  onChange={e => setEditingPartner({...editingPartner, name: e.target.value})}
+                  placeholder="Legal business name"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Partner Type</label>
+                <select 
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  value={editingPartner.party_type}
+                  onChange={e => setEditingPartner({...editingPartner, party_type: e.target.value})}
+                >
+                  <option value="Supplier">Supplier</option>
+                  <option value="Customer">Customer</option>
+                  <option value="Transporter">Transporter</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Business Address (OpenStreetMap Search)</label>
+                <AddressAutocomplete 
+                  value={editingPartner.address || ''}
+                  onChange={address => setEditingPartner({...editingPartner, address})}
+                  placeholder="Search for address in South Africa..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={() => setEditingPartner(null)}
+                  disabled={isSubmitting}
+                  className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 px-4 py-2.5 bg-amber-500 text-slate-900 rounded-lg text-sm font-bold hover:bg-amber-600 disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                  Update Partner
                 </button>
               </div>
             </form>
