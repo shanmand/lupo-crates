@@ -211,7 +211,7 @@ const TripManagement: React.FC = () => {
                   <tr>
                     <td>${i + 1}</td>
                     <td><strong>${loc?.name || 'Unknown'}</strong><br/><span style="font-size: 10px; color: #888;">${loc?.partner_type || ''}</span></td>
-                    <td>${loc?.id || '---'}</td>
+                    <td>${loc?.address || loc?.id || '---'}</td>
                     <td></td>
                     <td></td>
                     <td style="border-bottom: 1px solid #000;"></td>

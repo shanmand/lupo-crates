@@ -316,12 +316,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 ALTER TABLE public.business_parties ALTER COLUMN id TYPE TEXT;
 ALTER TABLE public.business_parties ALTER COLUMN id DROP DEFAULT;
 
-DROP VIEW IF EXISTS public.vw_business_directory;
+DROP VIEW IF EXISTS public.vw_business_directory CASCADE;
 CREATE OR REPLACE VIEW public.vw_business_directory AS
 SELECT 
     bp.id,
     bp.name,
     bp.party_type,
+    bp.address,
     COALESCE(asset_counts.type_count, 0) as asset_types,
     COALESCE(stock_counts.total_stock, 0) as current_stock
 FROM public.business_parties bp
@@ -676,3 +677,38 @@ ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS scheduled_date DATE;
 ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS scheduled_departure_time TEXT;
 ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS start_odometer INTEGER;
 ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS end_odometer INTEGER;
+
+-- 20. Address Support
+ALTER TABLE public.locations ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.business_parties ADD COLUMN IF NOT EXISTS address TEXT;
+
+-- Update vw_all_sources to include address
+DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
+CREATE OR REPLACE VIEW public.vw_all_sources AS
+SELECT 
+    id,
+    name,
+    partner_type,
+    branch_id,
+    type,
+    category,
+    address,
+    name || ' (' || partner_type || ')' as display_name,
+    CASE 
+        WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
+        WHEN type = 'In Transit' THEN 3
+        ELSE 2 
+    END as sort_group
+FROM public.locations
+UNION ALL
+SELECT 
+    id::text,
+    name,
+    party_type as partner_type,
+    NULL as branch_id,
+    'Business Party' as type,
+    'External' as category,
+    address,
+    name || ' (' || party_type || ')' as display_name,
+    2 as sort_group
+FROM public.business_parties;

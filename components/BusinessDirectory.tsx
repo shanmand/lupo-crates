@@ -14,12 +14,15 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
+import { AddressAutocomplete } from './AddressAutocomplete';
+
 interface BusinessPartner {
   id: string;
   name: string;
   party_type: string;
   asset_types: number;
   current_stock: number;
+  address?: string;
 }
 
 const BusinessDirectory: React.FC = () => {
@@ -34,7 +37,8 @@ const BusinessDirectory: React.FC = () => {
   const [newPartner, setNewPartner] = useState({
     id: '',
     name: '',
-    party_type: 'Supplier'
+    party_type: 'Supplier',
+    address: ''
   });
 
   const fetchData = async () => {
@@ -82,7 +86,7 @@ const BusinessDirectory: React.FC = () => {
       
       await fetchData();
       setIsAdding(false);
-      setNewPartner({ id: '', name: '', party_type: 'Supplier' });
+      setNewPartner({ id: '', name: '', party_type: 'Supplier', address: '' });
     } catch (err: any) {
       console.error("Add Partner Error:", err);
       setError(err.message || "Failed to add partner.");
@@ -168,6 +172,9 @@ const BusinessDirectory: React.FC = () => {
                     <div>
                       <p className="font-bold text-slate-800">{partner.name}</p>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{partner.id}</p>
+                      {partner.address && (
+                        <p className="text-[10px] text-emerald-600 font-bold mt-1 line-clamp-1 max-w-[200px]">{partner.address}</p>
+                      )}
                     </div>
                   </div>
                 </td>
@@ -265,6 +272,15 @@ const BusinessDirectory: React.FC = () => {
                   <option value="Transporter">Transporter</option>
                   <option value="Other">Other</option>
                 </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Business Address (OpenStreetMap Search)</label>
+                <AddressAutocomplete 
+                  value={newPartner.address || ''}
+                  onChange={address => setNewPartner({...newPartner, address})}
+                  placeholder="Search for address in South Africa..."
+                />
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-slate-100">

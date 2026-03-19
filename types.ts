@@ -119,6 +119,7 @@ export interface Location {
   category: LocationCategory;
   branch_id?: string;
   partner_type: PartnerType;
+  address?: string;
 }
 
 export interface MovementDestination {
@@ -128,6 +129,7 @@ export interface MovementDestination {
   display_name: string;
   type?: string;
   category?: string;
+  address?: string;
 }
 
 export interface Source {
@@ -139,6 +141,7 @@ export interface Source {
   branch_id?: string;
   type?: string;
   category?: string;
+  address?: string;
 }
 
 export interface Truck {
@@ -433,6 +436,7 @@ export interface BusinessParty {
   email?: string;
   phone?: string;
   created_at: string;
+  address?: string;
 }
 
 export interface Discount {

@@ -24,6 +24,8 @@ import { LocationType, LocationCategory, Location, UserRole, Branch, PartnerType
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { useUser } from '../UserContext';
 
+import { AddressAutocomplete } from './AddressAutocomplete';
+
 const LocationManagement: React.FC = () => {
   const { profile } = useUser();
   const isAdmin = profile?.role_name === UserRole.ADMIN;
@@ -52,7 +54,8 @@ const LocationManagement: React.FC = () => {
     type: LocationType.WAREHOUSE,
     category: LocationCategory.EXTERNAL,
     branch_id: '',
-    partner_type: PartnerType.INTERNAL
+    partner_type: PartnerType.INTERNAL,
+    address: ''
   });
 
   const fetchData = async () => {
@@ -186,7 +189,8 @@ const LocationManagement: React.FC = () => {
         type: LocationType.WAREHOUSE, 
         category: LocationCategory.EXTERNAL,
         branch_id: '',
-        partner_type: PartnerType.INTERNAL
+        partner_type: PartnerType.INTERNAL,
+        address: ''
       });
     } catch (err: any) {
       setNotification({ msg: err.message || "Failed to create location", type: 'error' });
@@ -210,7 +214,8 @@ const LocationManagement: React.FC = () => {
             type: editingLoc.type,
             category: editingLoc.category,
             branch_id: editingLoc.branch_id,
-            partner_type: editingLoc.partner_type
+            partner_type: editingLoc.partner_type,
+            address: editingLoc.address
           })
           .eq('id', editingLoc.id);
         
@@ -448,6 +453,14 @@ const LocationManagement: React.FC = () => {
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
+            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Business Address (OpenStreetMap Search)</label>
+              <AddressAutocomplete 
+                value={newLoc.address || ''}
+                onChange={address => setNewLoc({...newLoc, address})}
+                placeholder="Search for address in South Africa..."
+              />
+            </div>
             <div className="lg:col-span-3 pt-4 border-t border-slate-100">
               <button 
                 type="submit"
@@ -517,6 +530,14 @@ const LocationManagement: React.FC = () => {
                 <option value="">Unallocated</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
+            </div>
+            <div className="space-y-2 md:col-span-2 lg:col-span-3">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Business Address (OpenStreetMap Search)</label>
+              <AddressAutocomplete 
+                value={editingLoc.address || ''}
+                onChange={address => setEditingLoc({...editingLoc, address})}
+                placeholder="Search for address in South Africa..."
+              />
             </div>
             <div className="lg:col-span-3 pt-4 border-t border-slate-100 flex gap-4">
               <button 
@@ -629,6 +650,9 @@ const LocationManagement: React.FC = () => {
                       <div>
                          <p className="text-sm font-black text-slate-900">{loc.name}</p>
                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">ID: {loc.id}</p>
+                         {loc.address && (
+                           <p className="text-[10px] text-emerald-600 font-bold mt-1 line-clamp-1 max-w-xs">{loc.address}</p>
+                         )}
                       </div>
                     </div>
                   </td>

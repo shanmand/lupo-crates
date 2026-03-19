@@ -54,6 +54,7 @@ CREATE TABLE public.locations (
     category TEXT NOT NULL, -- Home, External
     branch_id TEXT REFERENCES public.branches(id),
     partner_type TEXT DEFAULT 'Internal', -- Internal, Customer, Supplier
+    address TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -283,6 +284,7 @@ CREATE TABLE public.business_parties (
     contact_person TEXT,
     email TEXT,
     phone TEXT,
+    address TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -973,6 +975,7 @@ INSERT INTO public.collection_requests (customer_id, asset_id, estimated_quantit
 ON CONFLICT DO NOTHING;
 
 -- 18. Management Reporting Views
+DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
 CREATE OR REPLACE VIEW public.vw_all_sources AS
 SELECT 
     id,
@@ -981,6 +984,7 @@ SELECT
     branch_id,
     type,
     category,
+    address,
     name || ' (' || partner_type || ')' as display_name,
     CASE 
         WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
@@ -996,6 +1000,7 @@ SELECT
     NULL as branch_id,
     'Business Party' as type,
     'External' as category,
+    address,
     name || ' (' || party_type || ')' as display_name,
     2 as sort_group
 FROM public.business_parties;
@@ -1263,3 +1268,26 @@ SELECT
     f.batch_id as oldest_stagnant_batch_id
 FROM branch_metrics m
 LEFT JOIN forensics f ON m.branch_id = f.branch_id;
+
+-- Business Directory View
+DROP VIEW IF EXISTS public.vw_business_directory CASCADE;
+CREATE OR REPLACE VIEW public.vw_business_directory AS
+SELECT 
+    bp.id,
+    bp.name,
+    bp.party_type,
+    bp.address,
+    COALESCE(asset_counts.type_count, 0) as asset_types,
+    COALESCE(stock_counts.total_stock, 0) as current_stock
+FROM public.business_parties bp
+LEFT JOIN (
+    SELECT supplier_id, count(*) as type_count
+    FROM public.asset_master
+    GROUP BY supplier_id
+) asset_counts ON bp.id = asset_counts.supplier_id
+LEFT JOIN (
+    SELECT am.supplier_id, sum(b.quantity) as total_stock
+    FROM public.batches b
+    JOIN public.asset_master am ON b.asset_id = am.id
+    GROUP BY am.supplier_id
+) stock_counts ON bp.id = stock_counts.supplier_id;
