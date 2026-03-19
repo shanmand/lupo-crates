@@ -345,6 +345,41 @@ export interface AuditLog {
   timestamp: string;
 }
 
+export interface DashboardStats {
+  available: number;
+  at_customers: number;
+  in_transit: number;
+  maintenance: number;
+  total_fleet: number;
+  lost_missing: number;
+  damaged: number;
+  pending_charges: number;
+  open_loss_cases: number;
+  accrued_rental: number;
+  settlement_liability: number;
+  active_customers: number;
+  movements_today: number;
+}
+
+export interface BatchForensics {
+  date: string;
+  type: string;
+  from_location: string;
+  to_location: string;
+  quantity: number;
+}
+
+export interface AssetIntelligence {
+  asset_code: string;
+  asset_type: string;
+  ownership: string;
+  status: string;
+  condition: string;
+  customer: string;
+  charge_type: string;
+  accrued: number;
+}
+
 export interface Task {
   id: string;
   title: string;

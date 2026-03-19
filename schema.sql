@@ -975,6 +975,58 @@ CREATE OR REPLACE VIEW public.vw_movement_destinations AS
 SELECT * FROM public.vw_all_sources
 ORDER BY sort_group, name;
 
+-- Module 1: Executive Dashboard Overhaul Views
+CREATE OR REPLACE VIEW public.vw_dashboard_stats AS
+WITH stats AS (
+    SELECT
+        SUM(CASE WHEN s.category = 'Home' AND s.type != 'In Transit' THEN b.quantity ELSE 0 END) as available,
+        SUM(CASE WHEN s.partner_type = 'Customer' THEN b.quantity ELSE 0 END) as at_customers,
+        SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END) as in_transit,
+        SUM(CASE WHEN b.status = 'Maintenance' THEN b.quantity ELSE 0 END) as maintenance,
+        SUM(b.quantity) as total_fleet,
+        -- Financial Alerts
+        SUM(CASE WHEN b.status = 'Lost' THEN b.quantity ELSE 0 END) as lost_missing,
+        SUM(CASE WHEN b.status = 'Damaged' THEN b.quantity ELSE 0 END) as damaged,
+        SUM(public.calculate_batch_accrual(b.id)) as pending_charges,
+        (SELECT COUNT(*) FROM public.asset_losses WHERE is_settled = FALSE) as open_loss_cases,
+        -- Liability
+        SUM(public.calculate_batch_accrual(b.id)) as accrued_rental,
+        (SELECT COALESCE(SUM(net_payable), 0) FROM public.settlements) as settlement_liability,
+        (SELECT COUNT(DISTINCT id) FROM public.locations WHERE partner_type = 'Customer') as active_customers,
+        (SELECT COALESCE(SUM(quantity), 0) FROM public.batch_movements WHERE transaction_date = CURRENT_DATE) as movements_today
+    FROM public.batches b
+    JOIN public.vw_all_sources s ON b.current_location_id = s.id
+)
+SELECT * FROM stats;
+
+CREATE OR REPLACE VIEW public.vw_batch_forensics AS
+SELECT 
+    bm.transaction_date as date,
+    bm.condition as type,
+    s_from.name as from_location,
+    s_to.name as to_location,
+    bm.quantity
+FROM public.batch_movements bm
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+ORDER BY bm.timestamp DESC
+LIMIT 20;
+
+-- Module 2: Crates & Pallets Management Views
+CREATE OR REPLACE VIEW public.vw_asset_intelligence AS
+SELECT 
+    b.id as asset_code,
+    am.type as asset_type,
+    am.ownership_type as ownership,
+    b.status,
+    'Good' as condition, 
+    COALESCE(s.name, 'Unknown') as customer,
+    am.billing_model as charge_type,
+    public.calculate_batch_accrual(b.id) as accrued
+FROM public.batches b
+JOIN public.asset_master am ON b.asset_id = am.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+
 -- Relax foreign key on batches to allow business party IDs
 ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS batches_current_location_id_fkey;
 

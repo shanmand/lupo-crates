@@ -43,9 +43,12 @@ import ClaimsManager from './components/ClaimsManager';
 import LogisticsOps from './components/LogisticsOps';
 import CollectionRequests from './components/CollectionRequests';
 import InventoryDashboard from './components/InventoryDashboard';
+import InventoryMap from './components/InventoryMap';
 import FinancialReport from './components/FinancialReport';
 import LossRecorder from './components/LossRecorder';
 import SupplierSettlementReport from './components/SupplierSettlementReport';
+import SupplierRecon from './components/SupplierRecon';
+import ExecutiveReport from './components/ExecutiveReport';
 import PaymentSettlement from './components/PaymentSettlement';
 import UserManagement from './components/UserManagement';
 import LocationManagement from './components/LocationManagement';
@@ -73,9 +76,12 @@ import { supabase } from './supabase';
 
 enum NavItem {
   DASHBOARD = 'dashboard',
+  EXECUTIVE_REPORT = 'executive-report',
   INVENTORY = 'inventory',
+  INVENTORY_MAP = 'inventory-map',
   FINANCIALS = 'financials',
   SETTLEMENT = 'settlement',
+  SUPPLIER_RECON = 'supplier-recon',
   PAYMENT_SETTLEMENT = 'payment-settlement',
   ASSETS = 'assets',
   TRACKER = 'tracker',
@@ -134,9 +140,12 @@ const AppContent: React.FC = () => {
     // Explicit module rendering
     switch (activeTab) {
       case NavItem.DASHBOARD: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} onSchemaFix={() => setActiveTab(NavItem.SCHEMA)} />;
+      case NavItem.EXECUTIVE_REPORT: return <ExecutiveReport />;
       case NavItem.INVENTORY: return <InventoryDashboard />;
+      case NavItem.INVENTORY_MAP: return <InventoryMap />;
       case NavItem.FINANCIALS: return <FinancialReport branchContext={currentBranchContext as any} />;
       case NavItem.SETTLEMENT: return <SupplierSettlementReport isAdmin={profile?.role_name === UserRole.ADMIN} />;
+      case NavItem.SUPPLIER_RECON: return <SupplierRecon />;
       case NavItem.PAYMENT_SETTLEMENT: return <PaymentSettlement currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
       case NavItem.ASSETS: return <AssetList isAdmin={profile?.role_name === UserRole.ADMIN} />;
       case NavItem.TRACKER: return <BatchTracker selectedBranchId={dbBranches.find(b => b.name === currentBranchContext)?.id} />;
@@ -192,27 +201,36 @@ const AppContent: React.FC = () => {
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           <div className="pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Overview</div>
-          <SidebarButton active={activeTab === NavItem.BATCH_SUMMARY_REPORT} onClick={() => setActiveTab(NavItem.BATCH_SUMMARY_REPORT)} icon={<BarChart3 size={18} />} label="Batch Summary Report" />
           <SidebarButton active={activeTab === NavItem.DASHBOARD} onClick={() => setActiveTab(NavItem.DASHBOARD)} icon={<LayoutDashboard size={18} />} label="Dashboard" />
+          <SidebarButton active={activeTab === NavItem.EXECUTIVE_REPORT} onClick={() => setActiveTab(NavItem.EXECUTIVE_REPORT)} icon={<BarChart3 size={18} />} label="Executive Report" />
+          <SidebarButton active={activeTab === NavItem.FINANCIALS} onClick={() => setActiveTab(NavItem.FINANCIALS)} icon={<TrendingUp size={18} />} label="Branch Health" />
           <SidebarButton active={activeTab === NavItem.REPORTS} onClick={() => setActiveTab(NavItem.REPORTS)} icon={<BarChart3 size={18} />} label="Logistics Intelligence" />
           <SidebarButton active={activeTab === NavItem.MANAGEMENT_REPORT} onClick={() => setActiveTab(NavItem.MANAGEMENT_REPORT)} icon={<FileText size={18} />} label="Management Report Pack" />
+          <SidebarButton active={activeTab === NavItem.BATCH_SUMMARY_REPORT} onClick={() => setActiveTab(NavItem.BATCH_SUMMARY_REPORT)} icon={<BarChart3 size={18} />} label="Batch Summary Report" />
 
-          <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Daily Operations</div>
+          <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Logistics & Ops</div>
+          <SidebarButton active={activeTab === NavItem.LOGISTICS} onClick={() => { setPendingAssignment(null); setActiveTab(NavItem.LOGISTICS); }} icon={<ClipboardList size={18} />} label="Logistics Ops" />
+          <SidebarButton active={activeTab === NavItem.TRACKER} onClick={() => setActiveTab(NavItem.TRACKER)} icon={<HistoryIcon size={18} />} label="Batch Forensic" />
           <SidebarButton active={activeTab === NavItem.TRIP_AUDIT} onClick={() => setActiveTab(NavItem.TRIP_AUDIT)} icon={<HistoryIcon size={18} />} label="Trip Audit Trail" />
-          <SidebarButton active={activeTab === NavItem.LOGISTICS} onClick={() => { setPendingAssignment(null); setActiveTab(NavItem.LOGISTICS); }} icon={<ClipboardList size={18} />} label="Capture Movement" />
           <SidebarButton active={activeTab === NavItem.COLLECTION_REQUESTS} onClick={() => setActiveTab(NavItem.COLLECTION_REQUESTS)} icon={<ArrowDownToLine size={18} />} label="Collection Requests" />
           <SidebarButton active={activeTab === NavItem.BATCH_MANAGEMENT} onClick={() => setActiveTab(NavItem.BATCH_MANAGEMENT)} icon={<ArrowDownToLine size={18} />} label="Inventory Intake" />
           <SidebarButton active={activeTab === NavItem.TASKS} onClick={() => setActiveTab(NavItem.TASKS)} icon={<ClipboardList size={18} />} label="Task Management" />
-          <SidebarButton active={activeTab === NavItem.LOSSES} onClick={() => setActiveTab(NavItem.LOSSES)} icon={<Skull size={18} />} label="Report Loss" />
-          <SidebarButton active={activeTab === NavItem.DRIVER_PORTAL} onClick={() => setActiveTab(NavItem.DRIVER_PORTAL)} icon={<Smartphone size={18} />} label="Driver Portal (Mobile)" />
+          <SidebarButton active={activeTab === NavItem.DRIVER_PORTAL} onClick={() => setActiveTab(NavItem.DRIVER_PORTAL)} icon={<Smartphone size={18} />} label="Driver Portal" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Inventory & Assets</div>
+          <SidebarButton active={activeTab === NavItem.INVENTORY} onClick={() => setActiveTab(NavItem.INVENTORY)} icon={<Globe size={18} />} label="Inventory" />
+          <SidebarButton active={activeTab === NavItem.INVENTORY_MAP} onClick={() => setActiveTab(NavItem.INVENTORY_MAP)} icon={<MapPin size={18} />} label="Inventory Map" />
           <SidebarButton active={activeTab === NavItem.ASSETS} onClick={() => setActiveTab(NavItem.ASSETS)} icon={<Tags size={18} />} label="Asset Master" />
-          <SidebarButton active={activeTab === NavItem.INVENTORY} onClick={() => setActiveTab(NavItem.INVENTORY)} icon={<Globe size={18} />} label="Inventory Map" />
-          <SidebarButton active={activeTab === NavItem.TRACKER} onClick={() => setActiveTab(NavItem.TRACKER)} icon={<HistoryIcon size={18} />} label="Batch Forensic" />
-          <SidebarButton active={activeTab === NavItem.STOCK_TAKE} onClick={() => setActiveTab(NavItem.STOCK_TAKE)} icon={<ClipboardCheck size={18} />} label="Stock Take Reconciliation" />
-          <SidebarButton active={activeTab === NavItem.LOCATIONS} onClick={() => setActiveTab(NavItem.LOCATIONS)} icon={<MapPin size={18} />} label="Location Registry" />
-          <SidebarButton active={activeTab === NavItem.LOGISTICS_REGISTRY} onClick={() => setActiveTab(NavItem.LOGISTICS_REGISTRY)} icon={<Truck size={18} />} label="Logistics Registry" />
+          <SidebarButton active={activeTab === NavItem.STOCK_TAKE} onClick={() => setActiveTab(NavItem.STOCK_TAKE)} icon={<ClipboardCheck size={18} />} label="Stock Take Recon" />
+          <SidebarButton active={activeTab === NavItem.LOSSES} onClick={() => setActiveTab(NavItem.LOSSES)} icon={<Skull size={18} />} label="Record a Loss" />
+
+          <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Finance & Claims</div>
+          <SidebarButton active={activeTab === NavItem.SETTLEMENT} onClick={() => setActiveTab(NavItem.SETTLEMENT)} icon={<Receipt size={18} />} label="Supplier Settlement" />
+          <SidebarButton active={activeTab === NavItem.SUPPLIER_RECON} onClick={() => setActiveTab(NavItem.SUPPLIER_RECON)} icon={<Receipt size={18} />} label="Supplier Recon" />
+          <SidebarButton active={activeTab === NavItem.FINANCE_SETTLEMENT} onClick={() => setActiveTab(NavItem.FINANCE_SETTLEMENT)} icon={<Receipt size={18} />} label="Finance Settlement" />
+          <SidebarButton active={activeTab === NavItem.PAYMENT_SETTLEMENT} onClick={() => setActiveTab(NavItem.PAYMENT_SETTLEMENT)} icon={<DollarSign size={18} />} label="Payment Settlement" />
+          <SidebarButton active={activeTab === NavItem.CLAIMS} onClick={() => setActiveTab(NavItem.CLAIMS)} icon={<Gavel size={18} />} label="Claims Centre" />
+          <SidebarButton active={activeTab === NavItem.LIABILITY_HEATMAP} onClick={() => setActiveTab(NavItem.LIABILITY_HEATMAP)} icon={<Flame size={18} />} label="Liability Heatmap" />
 
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Fleet & Personnel</div>
           <SidebarButton active={activeTab === NavItem.COMPLIANCE} onClick={() => setActiveTab(NavItem.COMPLIANCE)} icon={<ShieldCheck size={18} />} label="Fleet Readiness" />
@@ -220,19 +238,14 @@ const AppContent: React.FC = () => {
           <SidebarButton active={activeTab === NavItem.PERSONNEL} onClick={() => setActiveTab(NavItem.PERSONNEL)} icon={<UsersIcon size={18} />} label="Personnel Management" />
           <SidebarButton active={activeTab === NavItem.SHIFTS} onClick={() => setActiveTab(NavItem.SHIFTS)} icon={<Clock size={18} />} label="Shift Assignments" />
 
-          <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Finance & Claims</div>
-          <SidebarButton active={activeTab === NavItem.CLAIMS} onClick={() => setActiveTab(NavItem.CLAIMS)} icon={<Gavel size={18} />} label="Claims Centre" />
-          <SidebarButton active={activeTab === NavItem.SETTLEMENT} onClick={() => setActiveTab(NavItem.SETTLEMENT)} icon={<Receipt size={18} />} label="Supplier Audit" />
-          <SidebarButton active={activeTab === NavItem.FINANCE_SETTLEMENT} onClick={() => setActiveTab(NavItem.FINANCE_SETTLEMENT)} icon={<Receipt size={18} />} label="Finance Settlement" />
-          <SidebarButton active={activeTab === NavItem.PAYMENT_SETTLEMENT} onClick={() => setActiveTab(NavItem.PAYMENT_SETTLEMENT)} icon={<DollarSign size={18} />} label="Payment Settlement" />
-          <SidebarButton active={activeTab === NavItem.LIABILITY_HEATMAP} onClick={() => setActiveTab(NavItem.LIABILITY_HEATMAP)} icon={<Flame size={18} />} label="Liability Heatmap" />
-
           <div className="pt-4 pb-2 px-4 font-black text-[10px] text-slate-500 uppercase tracking-widest">Configuration</div>
           <SidebarButton active={activeTab === NavItem.BUSINESS_DIRECTORY} onClick={() => setActiveTab(NavItem.BUSINESS_DIRECTORY)} icon={<Building2 size={18} />} label="Business Directory" />
           <SidebarButton active={activeTab === NavItem.USERS} onClick={() => setActiveTab(NavItem.USERS)} icon={<UsersIcon size={18} />} label="User Management" />
+          <SidebarButton active={activeTab === NavItem.LOCATIONS} onClick={() => setActiveTab(NavItem.LOCATIONS)} icon={<MapPin size={18} />} label="Location Registry" />
+          <SidebarButton active={activeTab === NavItem.LOGISTICS_REGISTRY} onClick={() => setActiveTab(NavItem.LOGISTICS_REGISTRY)} icon={<Truck size={18} />} label="Logistics Registry" />
           <SidebarButton active={activeTab === NavItem.ADMIN} onClick={() => setActiveTab(NavItem.ADMIN)} icon={<Settings size={18} />} label="Admin Panel" />
           <SidebarButton active={activeTab === NavItem.SCHEMA} onClick={() => setActiveTab(NavItem.SCHEMA)} icon={<Database size={18} />} label="Data Schema" />
-          <SidebarButton active={activeTab === NavItem.CONNECT} onClick={() => setActiveTab(NavItem.CONNECT)} icon={<Globe size={18} />} label="Database Connectivity" />
+          <SidebarButton active={activeTab === NavItem.CONNECT} onClick={() => setActiveTab(NavItem.CONNECT)} icon={<Globe size={18} />} label="Connectivity" />
         </nav>
 
         <div className="p-4 bg-slate-950/50 border-t border-slate-800">

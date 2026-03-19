@@ -1,421 +1,181 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
-import { Truck, Package, AlertTriangle, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Calendar, User as UserIcon, History as HistoryIcon, UserCheck, Skull, MapPin, Loader2, Info, Zap } from 'lucide-react';
-import { MOCK_BATCHES, MOCK_CLAIMS, MOCK_LOCATIONS, MOCK_MOVEMENTS, MOCK_ASSETS, MOCK_LOSSES, MOCK_USERS } from '../constants';
-import { LocationType, UserRole, User as UserType, Batch, AssetLoss, Location, User as DBUser, AssetMaster, Claim } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Truck, Package, AlertTriangle, TrendingUp, ShieldAlert, User as UserIcon, UserCheck, Loader2, Zap, Activity } from 'lucide-react';
+import { User as UserType, DashboardStats, BatchForensics } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface DashboardViewProps {
   currentUser: UserType;
-  branchContext?: 'Kya Sands' | 'Durban' | 'Consolidated';
+  branchContext?: 'Consolidated' | 'Kya Sands' | 'Durban';
   onDrillDown?: () => void;
   onSchemaFix?: () => void;
 }
 
-const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContext = 'Consolidated', onDrillDown, onSchemaFix }) => {
-  console.log('DashboardView Rendering...', { branchContext, currentUser: currentUser?.id });
-  const [dbBatches, setDbBatches] = useState<Batch[]>([]);
-  const [dbLosses, setDbLosses] = useState<AssetLoss[]>([]);
-  const [dbLocations, setDbLocations] = useState<Location[]>([]);
-  const [dbUsers, setDbUsers] = useState<DBUser[]>([]);
-  const [dbAssets, setDbAssets] = useState<AssetMaster[]>([]);
-  const [dbClaims, setDbClaims] = useState<Claim[]>([]);
-  const [dbBranches, setDbBranches] = useState<{id: string, name: string}[]>([]);
-  const [schemaError, setSchemaError] = useState<string | null>(null);
+const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContext = 'Consolidated' }) => {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentActivity, setRecentActivity] = useState<BatchForensics[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Supabase Real-time Dashboard Fetch
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!isSupabaseConfigured) {
-        setDbBatches(MOCK_BATCHES);
-        setDbLosses(MOCK_LOSSES);
-        setDbLocations(MOCK_LOCATIONS);
-        setDbUsers(MOCK_USERS);
-        setDbAssets(MOCK_ASSETS);
-        setDbClaims(MOCK_CLAIMS);
-        setDbBranches([]);
         setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
       try {
-        console.log('Fetching Dashboard Data...');
-        const [inventoryRes, lossesRes, locsRes, usersRes, assetsRes, claimsRes, branchesRes] = await Promise.all([
-          supabase.from('batches').select('*'),
-          supabase.from('asset_losses').select('*'),
-          supabase.from('vw_all_sources').select('*'),
-          supabase.from('users').select('*'),
-          supabase.from('asset_master').select('*'),
-          supabase.from('claims').select('*'),
-          supabase.from('branches').select('*')
+        const [statsRes, activityRes] = await Promise.all([
+          supabase.from('vw_dashboard_stats').select('*').single(),
+          supabase.from('vw_batch_forensics').select('*').limit(20)
         ]);
 
-        console.log('Dashboard Data Received:', {
-          inventory: inventoryRes.data?.length,
-          losses: lossesRes.data?.length,
-          locations: locsRes.data?.length,
-          branches: branchesRes.data?.length
-        });
-
-        if (inventoryRes.data) {
-          const mappedBatches = inventoryRes.data.map((item: any) => {
-            const asset = assetsRes.data?.find(a => a.id === item.asset_id);
-            const location = locsRes.data?.find(l => l.id === item.current_location_id);
-            
-            const txDate = new Date(item.transaction_date || item.created_at);
-            const now = new Date();
-            const diffTime = Math.abs(now.getTime() - txDate.getTime());
-            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-            return {
-              ...item,
-              asset_name: asset?.name || 'Unknown Asset',
-              current_location: location?.name || 'Unknown Location',
-              days_in_circulation: diffDays,
-              daily_accrued_liability: 0,
-              branch_id: location?.branch_id
-            };
-          });
-          // De-duplicate batches
-          const uniqueBatches = Array.from(new Map(mappedBatches.map((item: any) => [item.id, item])).values());
-          setDbBatches(uniqueBatches as any);
-        }
-        if (lossesRes.data) setDbLosses(lossesRes.data);
-        if (locsRes.data) {
-          // De-duplicate locations
-          const uniqueLocs = Array.from(new Map(locsRes.data.map((item: any) => [item.id, item])).values());
-          setDbLocations(uniqueLocs);
-        }
-        if (usersRes.data) setDbUsers(usersRes.data);
-        if (assetsRes.data) setDbAssets(assetsRes.data);
-        if (claimsRes.data) setDbClaims(claimsRes.data);
-        
-        // Handle branches with fallback
-        if (branchesRes.error) {
-          setSchemaError("Missing 'branches' table or 'branch_id' column. Please run SQL migrations.");
-          setDbBranches([]);
-        } else if (branchesRes.data) {
-          setDbBranches(branchesRes.data);
-        }
-
+        if (statsRes.data) setStats(statsRes.data);
+        if (activityRes.data) setRecentActivity(activityRes.data);
       } catch (err) {
-        console.error("Dashboard Sync Error:", err);
+        console.error("Dashboard Fetch Error:", err);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchDashboardData();
-  }, []);
+  }, [branchContext]);
 
-  const displayBatches = dbBatches;
-  const displayLosses = dbLosses;
-  const displayLocations = dbLocations;
-  const displayUsers = dbUsers;
-  const displayAssets = dbAssets;
-  const displayClaims = dbClaims;
-
-  const currentBranchId = useMemo(() => {
-    if (branchContext === 'Consolidated') return null;
-    return dbBranches.find(b => b?.name?.includes(branchContext))?.id;
-  }, [branchContext, dbBranches]);
-
-  const filteredBatches = useMemo(() => {
-    let base = displayBatches;
-    
-    // Apply Branch Filter
-    if (currentBranchId) {
-      base = base.filter(b => (b as any).branch_id === currentBranchId);
-    }
-
-    return base;
-  }, [currentBranchId, displayBatches]);
-
-  const filteredLosses = useMemo(() => {
-    let base = displayLosses;
-    if (currentBranchId) {
-      base = base.filter(l => {
-        const loc = displayLocations.find(loc => loc?.id === l?.last_known_location_id);
-        return loc?.branch_id === currentBranchId;
-      });
-    }
-    return base;
-  }, [currentBranchId, displayLosses, displayLocations]);
-
-  const avgTurnaround = useMemo(() => {
-    if (filteredBatches.length === 0) return 0;
-    const totalDays = filteredBatches.reduce((acc, b: any) => acc + (b?.days_in_circulation || 0), 0);
-    return totalDays / filteredBatches.length;
-  }, [filteredBatches]);
-
-  const totalPallets = filteredBatches.reduce((acc, b) => {
-    const asset = displayAssets.find(a => a?.id === b?.asset_id);
-    return asset?.type === 'Pallet' ? acc + (b?.quantity || 0) : acc;
-  }, 0);
-
-  const estimatedUnbilledRental = useMemo(() => {
-    // Use the daily_accrued_liability from the view
-    return filteredBatches.reduce((acc, b: any) => acc + (b?.daily_accrued_liability || 0), 0);
-  }, [filteredBatches]);
-
-  const pendingClaimsValue = displayClaims.filter(c => c?.status === 'Lodged').reduce((acc, c) => acc + (c?.amount_claimed_zar || 0), 0);
-
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatCurrency = (val: number) => 
+    new Intl.NumberFormat('en-ZA', { 
+      style: 'currency', 
+      currency: 'ZAR',
+      minimumFractionDigits: 2 
+    }).format(val);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="animate-spin text-amber-500" size={32} />
-          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Polling Supabase Clusters...</p>
+        <div className="text-center space-y-4">
+          <Loader2 className="animate-spin text-emerald-500 mx-auto" size={48} />
+          <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Aggregating Fleet Intelligence...</p>
         </div>
       </div>
     );
   }
 
+  if (!stats) return (
+    <div className="p-8 text-center text-slate-500">
+      <AlertTriangle className="mx-auto mb-4 opacity-20" size={48} />
+      <p className="font-black uppercase tracking-widest text-sm">No Dashboard Data Available</p>
+    </div>
+  );
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {schemaError && (
-        <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-3xl flex items-center justify-between gap-6 shadow-xl shadow-amber-100/50">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
-              <AlertTriangle size={24} />
-            </div>
-            <div>
-              <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">Database Schema Out of Sync</h4>
-              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-1">{schemaError}</p>
-            </div>
-          </div>
-          <button 
-            onClick={onSchemaFix}
-            className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
-          >
-            Go to SQL Migrations
-          </button>
-        </div>
-      )}
-
-      {/* Manager Oversight - Accountability for Losses */}
-      {(currentUser.role === UserRole.MANAGER || currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.EXECUTIVE) && (
-        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200 border border-slate-200 overflow-hidden ring-4 ring-slate-50 transition-all">
-          <div className="px-8 py-5 bg-slate-900 flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-rose-500 rounded-lg shadow-inner"><Skull size={18} className="text-white" /></div>
-              <div>
-                <h3 className="font-black text-xs uppercase tracking-[0.2em] text-white">Loss Accountability Matrix</h3>
-                <p className="text-[10px] font-bold text-slate-400">Context: {branchContext} Branch Filter (Synced)</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-800 rounded-full border border-slate-700">
-               <UserCheck size={14} className="text-emerald-400" />
-               <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Supabase Live Query</span>
-            </div>
-          </div>
-          <div className="p-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredLosses.slice(0, 3).map(loss => {
-                const batch = displayBatches.find(b => b?.id === loss?.batch_id);
-                const riskLevel = (loss?.lost_quantity || 0) > 20 ? 'CRITICAL' : 'MODERATE';
-                const location = displayLocations.find(l => l?.id === loss?.last_known_location_id);
-                
-                return (
-                  <div key={`loss-${loss?.id}`} className={`p-6 rounded-2xl border-2 transition-all group relative overflow-hidden hover:shadow-lg ${riskLevel === 'CRITICAL' ? 'border-rose-100 bg-rose-50/30' : 'border-slate-100 bg-slate-50'}`}>
-                    <div className="relative z-10">
-                       <div className="flex justify-between items-start mb-4">
-                         <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${riskLevel === 'CRITICAL' ? 'bg-rose-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm'}`}>
-                            {riskLevel} RISK
-                         </span>
-                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">REF: {loss?.id}</span>
-                       </div>
-                       
-                       <p className="text-sm font-black text-slate-800 leading-tight mb-1">{loss?.lost_quantity}x {displayAssets.find(a => a.id === batch?.asset_id)?.name}</p>
-                       <p className="text-[10px] text-slate-400 font-bold mb-4 flex items-center gap-1"><MapPin size={10} /> {location?.name}</p>
-                       <p className="text-xs text-slate-500 line-clamp-2 italic mb-6">"{loss?.notes}"</p>
-
-                       <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                             <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center border-4 border-white shadow-lg group-hover:scale-110 transition-transform">
-                                <span className="text-xs font-black text-white">{(loss?.reported_by || 'U').charAt(0).toUpperCase()}</span>
-                             </div>
-                             <div>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Reporter</p>
-                                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{loss?.reported_by || 'System'}</p>
-                             </div>
-                          </div>
-                          <div className="text-right">
-                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Reported</p>
-                             <p className="text-[10px] font-bold text-slate-700">{loss?.timestamp ? new Date(loss.timestamp).toLocaleDateString() : 'N/A'}</p>
-                          </div>
-                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {filteredLosses.length === 0 && (
-                <div className="col-span-3 py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                  <p className="text-sm text-slate-400 italic">No reported losses found in this context.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          label="Active Batches" 
-          value={filteredBatches.length.toString()} 
-          trend="0%" 
-          trendUp={true} 
-          icon={<Package className="text-blue-500" />} 
-        />
-        <StatCard 
-          label="In Transit" 
-          value={filteredBatches.filter(b => b.status === 'In-Transit' || displayLocations.find(l => l.id === b.current_location_id)?.type === LocationType.IN_TRANSIT).length.toString()} 
-          trend="0%" 
-          trendUp={false} 
-          icon={<Truck className="text-amber-500" />} 
-        />
-        <StatCard 
-          label="Pending Claims" 
-          value={displayClaims.filter(c => c.status === 'Lodged').length.toString()} 
-          trend="0" 
-          trendUp={true} 
-          icon={<AlertTriangle className="text-rose-500" />} 
-        />
-        <StatCard 
-          label="Avg Turnaround" 
-          value={`${avgTurnaround.toFixed(1)} Days`} 
-          trend="0%" 
-          trendUp={true} 
-          icon={<TrendingUp className="text-emerald-500" />} 
-        />
-      </div>
-
-      {/* Source Data Explanation */}
-      <div className="bg-slate-50 border border-slate-200 p-6 rounded-xl flex gap-4">
-        <Info className="text-blue-500 shrink-0" size={20} />
+    <div className="space-y-8 p-8 bg-slate-950 min-h-screen text-slate-200">
+      {/* Header */}
+      <div className="flex justify-between items-end">
         <div>
-          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">Claims Source Data</h4>
-          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-            Claims are automatically generated when a <strong>Quantity Variance</strong> is reported during the <strong>Inventory Intake</strong> process. 
-            They can also be manually triggered from the <strong>Logistics Intelligence</strong> module when reconciling signed THAAN slips against dispatched quantities.
-            Each claim tracks the liability of the transporter (Truck/Driver) for damaged or missing assets.
+          <h2 className="text-3xl font-black tracking-tighter text-white">EXECUTIVE DASHBOARD</h2>
+          <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-1">
+            Real-time Fleet & Liability Overview • {branchContext}
           </p>
         </div>
+        <div className="text-right">
+          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">System Status</p>
+          <p className="text-xs font-bold text-white">LIVE FEED ACTIVE</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:border-emerald-200 transition-colors group">
-          <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center group-hover:bg-emerald-50 transition-colors">
-            <div className="flex items-center gap-2">
-              <Calendar size={18} className="text-emerald-600" />
-              <h3 className="font-bold text-slate-800">Branch Accrual Matrix</h3>
-            </div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Real-time ZAR</span>
-          </div>
-          <div className="p-6 space-y-6 flex-1 flex flex-col justify-between">
-            <div className="space-y-6">
-              <div className="flex justify-between items-end border-b border-slate-50 pb-4">
-                <div>
-                  <p className="text-xs text-slate-500 font-medium uppercase tracking-tighter">Pallets (Active)</p>
-                  <p className="text-2xl font-bold text-slate-800">{totalPallets}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-500 font-medium uppercase tracking-tighter">Crates</p>
-                  <p className="text-xl font-bold text-slate-800">{filteredBatches.length - totalPallets}</p>
-                </div>
-              </div>
-              
-              <div className="flex justify-between items-end border-b border-slate-50 pb-4">
-                <div>
-                  <p className="text-xs text-slate-500 font-medium uppercase tracking-tighter">Accrued Rental Liability</p>
-                  <p className="text-2xl font-bold text-emerald-600">R {formatCurrency(estimatedUnbilledRental)}</p>
-                </div>
-                <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black rounded uppercase tracking-widest animate-pulse">Running</div>
-              </div>
+      {/* Top Row: Fleet Status */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <DashboardCard label="Available" value={stats.available} icon={<Package className="text-emerald-400" />} />
+        <DashboardCard label="At Customers" value={stats.at_customers} icon={<UserIcon className="text-blue-400" />} />
+        <DashboardCard label="In Transit" value={stats.in_transit} icon={<Truck className="text-amber-400" />} />
+        <DashboardCard label="Maintenance" value={stats.maintenance} icon={<AlertTriangle className="text-rose-400" />} />
+        <DashboardCard label="Total Fleet" value={stats.total_fleet} icon={<Activity className="text-slate-400" />} />
+      </div>
 
-              <div>
-                <p className="text-xs text-slate-500 font-medium uppercase tracking-tighter">Pending Claim Value</p>
-                <p className="text-2xl font-bold text-rose-500">R {formatCurrency(pendingClaimsValue)}</p>
-                <p className="text-[9px] text-slate-400 mt-1 italic leading-tight">* Offset potential from supplier recovery</p>
-              </div>
-            </div>
-            
-            <button 
-              onClick={onDrillDown}
-              className="w-full mt-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
-            >
-              <TrendingUp size={14} /> View Historical Drill-down
-            </button>
-          </div>
+      {/* Middle Row: Financial Alerts */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <AlertCard label="Lost / Missing" value={stats.lost_missing} color="rose" />
+        <AlertCard label="Damaged" value={stats.damaged} color="rose" />
+        <AlertCard label="Pending Charges" value={formatCurrency(stats.pending_charges)} color="amber" />
+        <AlertCard label="Open Loss Cases" value={stats.open_loss_cases} color="amber" />
+      </div>
+
+      {/* Bottom Row: Liability */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <DashboardCard label="Accrued Rental" value={formatCurrency(stats.accrued_rental)} icon={<TrendingUp className="text-emerald-400" />} />
+        <DashboardCard label="Settlement Liability" value={formatCurrency(stats.settlement_liability)} icon={<ShieldAlert className="text-blue-400" />} />
+        <DashboardCard label="Active Customers" value={stats.active_customers} icon={<UserCheck className="text-indigo-400" />} />
+        <DashboardCard label="Movements Today" value={stats.movements_today} icon={<Zap className="text-amber-400" />} />
+      </div>
+
+      {/* Recent Activity Table */}
+      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
+        <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
+          <h3 className="text-sm font-black uppercase tracking-widest text-emerald-500">Recent Activity Log</h3>
+          <span className="text-[10px] font-bold text-slate-500 uppercase">Last 20 Movements</span>
         </div>
-
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:border-blue-100 transition-colors">
-          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-            <div className="flex items-center gap-2">
-               <HistoryIcon size={16} className="text-blue-500" />
-               <h3 className="font-bold text-slate-800 uppercase tracking-widest text-[11px]">Branch Operations Manifest</h3>
-            </div>
-            <button className="text-[10px] text-blue-600 font-black uppercase tracking-widest hover:underline">View All</button>
-          </div>
-          <div className="divide-y divide-slate-50 overflow-y-auto max-h-[420px]">
-            {filteredBatches.map((batch, i) => {
-              const loc = displayLocations.find(l => l?.id === batch?.current_location_id || l?.name === batch?.current_location_id);
-              return (
-                <div key={`batch-${batch?.id}`} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors group/row">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-2.5 rounded-xl shadow-sm group-hover/row:scale-110 transition-transform ${batch?.status === 'In-Transit' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                      {batch?.status === 'In-Transit' ? <Truck size={20} /> : <Package size={20} />}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-black text-slate-800 tracking-tight">#{batch?.id}</p>
-                        {batch?.status === 'In-Transit' && <span className="text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded uppercase tracking-tighter animate-pulse shadow-sm shadow-amber-900/10">In-Transit</span>}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                         <MapPin size={10} className="text-slate-300" />
-                         <p className="text-[10px] text-slate-500 font-medium">{loc?.name}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-slate-800">{batch?.quantity} Units</p>
-                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">{displayAssets.find(a => a?.id === batch?.asset_id)?.type}</p>
-                  </div>
-                </div>
-              );
-            })}
-            {filteredBatches.length === 0 && (
-              <div className="py-20 text-center flex flex-col items-center gap-2">
-                <Package size={48} className="text-slate-100" />
-                <p className="text-sm text-slate-400 italic">No batches found for this branch filter.</p>
-              </div>
-            )}
-          </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800 bg-slate-950/30">
+                <th className="px-6 py-4">Date</th>
+                <th className="px-6 py-4">Type</th>
+                <th className="px-6 py-4">From</th>
+                <th className="px-6 py-4">To</th>
+                <th className="px-6 py-4 text-right">Quantity</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {recentActivity.map((activity, i) => (
+                <tr key={i} className="hover:bg-slate-800/30 transition-colors group">
+                  <td className="px-6 py-4 text-xs font-bold text-slate-300">
+                    {new Date(activity.date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                      activity.type.toLowerCase().includes('clean') ? 'bg-emerald-500/10 text-emerald-500' : 
+                      activity.type.toLowerCase().includes('dirty') ? 'bg-amber-500/10 text-amber-500' :
+                      'bg-blue-500/10 text-blue-500'
+                    }`}>
+                      {activity.type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.from_location}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.to_location}</td>
+                  <td className="px-6 py-4 text-xs font-black text-emerald-400 text-right tabular-nums">{activity.quantity}</td>
+                </tr>
+              ))}
+              {recentActivity.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-600 font-bold uppercase tracking-widest text-xs">
+                    No recent movements recorded
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
 };
 
-const StatCard: React.FC<{ label: string, value: string, trend: string, trendUp: boolean, icon: React.ReactNode }> = ({ label, value, trend, trendUp, icon }) => (
-  <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all group cursor-default">
-    <div className="flex items-center justify-between mb-4">
-      <div className="p-2.5 bg-slate-50 rounded-xl group-hover:bg-white transition-colors shadow-inner">
-        {icon}
-      </div>
-      <div className={`flex items-center text-[10px] font-black px-2 py-0.5 rounded-full ${trendUp ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
-        {trend} {trendUp ? <ArrowUpRight size={12} className="ml-0.5" /> : <ArrowDownRight size={12} className="ml-0.5" />}
-      </div>
+const DashboardCard: React.FC<{ label: string, value: string | number, icon: React.ReactNode }> = ({ label, value, icon }) => (
+  <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 hover:border-emerald-500/50 transition-all group shadow-lg">
+    <div className="flex justify-between items-start mb-4">
+      <div className="p-2 bg-slate-800 rounded-xl group-hover:bg-slate-700 transition-colors">{icon}</div>
     </div>
-    <div>
-      <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">{label}</h4>
-      <p className="text-3xl font-black text-slate-800 mt-1 tracking-tighter">{value}</p>
-    </div>
+    <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</h4>
+    <p className="text-2xl font-black text-white mt-1 tracking-tight tabular-nums">{value}</p>
+  </div>
+);
+
+const AlertCard: React.FC<{ label: string, value: string | number, color: 'rose' | 'amber' }> = ({ label, value, color }) => (
+  <div className={`bg-slate-900 p-6 rounded-2xl border-l-4 ${
+    color === 'rose' ? 'border-rose-500 shadow-rose-500/5' : 'border-amber-500 shadow-amber-500/5'
+  } hover:bg-slate-800/50 transition-all shadow-lg`}>
+    <h4 className={`text-[10px] font-black uppercase tracking-widest ${color === 'rose' ? 'text-rose-400' : 'text-amber-400'}`}>{label}</h4>
+    <p className="text-2xl font-black text-white mt-1 tracking-tight tabular-nums">{value}</p>
   </div>
 );
 
