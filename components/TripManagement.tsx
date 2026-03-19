@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Truck, MapPin, Calendar, Plus, ChevronRight, CheckCircle2, Clock, User, Navigation, AlertCircle, Loader2, Save, Trash2, ArrowRight } from 'lucide-react';
+import { Truck, MapPin, Calendar, Plus, ChevronRight, CheckCircle2, Clock, User, Navigation, AlertCircle, Loader2, Save, Trash2, ArrowRight, ArrowUp, ArrowDown, Edit } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Trip, TripStop, Driver, Truck as TruckType, Source } from '../types';
 
@@ -12,6 +12,7 @@ const TripManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showNewTripModal, setShowNewTripModal] = useState(false);
+  const [showEditTripModal, setShowEditTripModal] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [tripStops, setTripStops] = useState<TripStop[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +31,8 @@ const TripManagement: React.FC = () => {
     start_odometer: 0,
     end_odometer: 0
   });
+
+  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -111,6 +114,96 @@ const TripManagement: React.FC = () => {
       fetchTripStops(tripId);
     } catch (err) {
       console.error("Error adding stop:", err);
+    }
+  };
+
+  const handleDeleteStop = async (stopId: string) => {
+    if (!window.confirm('Are you sure you want to remove this stop?')) return;
+    try {
+      const { error } = await supabase.from('trip_stops').delete().eq('id', stopId);
+      if (error) throw error;
+      
+      // Re-sequence remaining stops
+      if (selectedTrip) {
+        const remainingStops = tripStops.filter(s => s.id !== stopId);
+        for (let i = 0; i < remainingStops.length; i++) {
+          await supabase
+            .from('trip_stops')
+            .update({ sequence_number: i + 1 })
+            .eq('id', remainingStops[i].id);
+        }
+        fetchTripStops(selectedTrip.id);
+      }
+    } catch (err) {
+      console.error("Error deleting stop:", err);
+    }
+  };
+
+  const handleMoveStop = async (stopId: string, direction: 'up' | 'down') => {
+    const idx = tripStops.findIndex(s => s.id === stopId);
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === tripStops.length - 1) return;
+
+    const otherIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const stopA = tripStops[idx];
+    const stopB = tripStops[otherIdx];
+
+    try {
+      await Promise.all([
+        supabase.from('trip_stops').update({ sequence_number: stopB.sequence_number }).eq('id', stopA.id),
+        supabase.from('trip_stops').update({ sequence_number: stopA.sequence_number }).eq('id', stopB.id)
+      ]);
+      if (selectedTrip) fetchTripStops(selectedTrip.id);
+    } catch (err) {
+      console.error("Error reordering stops:", err);
+    }
+  };
+
+  const handleUpdateTrip = async () => {
+    if (!editingTrip) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const { error: updateError } = await supabase
+        .from('trips')
+        .update({
+          driver_id: editingTrip.driver_id,
+          truck_id: editingTrip.truck_id,
+          route_name: editingTrip.route_name,
+          status: editingTrip.status,
+          scheduled_date: editingTrip.scheduled_date,
+          scheduled_departure_time: editingTrip.scheduled_departure_time,
+          start_odometer: editingTrip.start_odometer,
+          end_odometer: editingTrip.end_odometer
+        })
+        .eq('id', editingTrip.id);
+      
+      if (updateError) throw updateError;
+      
+      setShowEditTripModal(false);
+      setSelectedTrip(editingTrip);
+      fetchData();
+    } catch (err: any) {
+      console.error("Error updating trip:", err);
+      setError(err.message || "Failed to update trip.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteTrip = async (tripId: string) => {
+    if (!window.confirm('Are you sure you want to delete this entire trip and all its stops?')) return;
+    try {
+      // Delete stops first (cascade might handle it but let's be explicit)
+      await supabase.from('trip_stops').delete().eq('trip_id', tripId);
+      const { error } = await supabase.from('trips').delete().eq('id', tripId);
+      if (error) throw error;
+      
+      setSelectedTrip(null);
+      setTripStops([]);
+      fetchData();
+    } catch (err) {
+      console.error("Error deleting trip:", err);
     }
   };
 
@@ -312,7 +405,27 @@ const TripManagement: React.FC = () => {
                 }`}>
                   {trip.status}
                 </div>
-                <span className="text-[10px] font-mono text-slate-400">{trip.id}</span>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingTrip(trip);
+                      setShowEditTripModal(true);
+                    }}
+                    className="p-2 text-slate-400 hover:text-emerald-500 transition-colors"
+                  >
+                    <Edit size={16} />
+                  </button>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTrip(trip.id);
+                    }}
+                    className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
               <h4 className="font-black text-slate-800 text-lg leading-tight">{trip.route_name || 'Unnamed Route'}</h4>
               <div className="mt-4 space-y-2">
@@ -403,6 +516,30 @@ const TripManagement: React.FC = () => {
                             </p>
                           </div>
                           <div className="flex gap-2">
+                            {stop.status === 'Pending' && (
+                              <div className="flex gap-1 mr-2">
+                                <button 
+                                  onClick={() => handleMoveStop(stop.id, 'up')}
+                                  disabled={idx === 0}
+                                  className="p-2 text-slate-400 hover:text-emerald-500 disabled:opacity-20"
+                                >
+                                  <ArrowUp size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => handleMoveStop(stop.id, 'down')}
+                                  disabled={idx === tripStops.length - 1}
+                                  className="p-2 text-slate-400 hover:text-emerald-500 disabled:opacity-20"
+                                >
+                                  <ArrowDown size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteStop(stop.id)}
+                                  className="p-2 text-slate-400 hover:text-red-500"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            )}
                             {stop.status === 'Pending' && (
                               <button 
                                 onClick={() => updateStopStatus(stop.id, 'Arrived')}
@@ -538,6 +675,27 @@ const TripManagement: React.FC = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Start Odometer</label>
+                  <input 
+                    type="number" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={newTrip.start_odometer}
+                    onChange={e => setNewTrip({...newTrip, start_odometer: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">End Odometer</label>
+                  <input 
+                    type="number" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={newTrip.end_odometer}
+                    onChange={e => setNewTrip({...newTrip, end_odometer: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+              </div>
+
               <button 
                 onClick={handleCreateTrip}
                 disabled={isSaving || !newTrip.route_name || !newTrip.driver_id || !newTrip.truck_id}
@@ -545,6 +703,125 @@ const TripManagement: React.FC = () => {
               >
                 {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                 Initialize Route
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Trip Modal */}
+      {showEditTripModal && editingTrip && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Edit Trip Details</h3>
+              <button onClick={() => setShowEditTripModal(false)} className="text-slate-400 hover:text-slate-600"><Trash2 size={24} /></button>
+            </div>
+            <div className="p-8 space-y-6">
+              {error && (
+                <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-xs font-bold">
+                  <AlertCircle size={18} />
+                  {error}
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Route Name</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                  value={editingTrip.route_name}
+                  onChange={e => setEditingTrip({...editingTrip, route_name: e.target.value})}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scheduled Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={editingTrip.scheduled_date}
+                    onChange={e => setEditingTrip({...editingTrip, scheduled_date: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Departure Time</label>
+                  <input 
+                    type="time" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={editingTrip.scheduled_departure_time}
+                    onChange={e => setEditingTrip({...editingTrip, scheduled_departure_time: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Driver</label>
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all appearance-none"
+                    value={editingTrip.driver_id}
+                    onChange={e => setEditingTrip({...editingTrip, driver_id: e.target.value})}
+                  >
+                    <option value="">Select Driver</option>
+                    {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Truck</label>
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all appearance-none"
+                    value={editingTrip.truck_id}
+                    onChange={e => setEditingTrip({...editingTrip, truck_id: e.target.value})}
+                  >
+                    <option value="">Select Truck</option>
+                    {trucks.map(t => <option key={t.id} value={t.id}>{t.plate_number}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Start Odometer</label>
+                  <input 
+                    type="number" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={editingTrip.start_odometer || 0}
+                    onChange={e => setEditingTrip({...editingTrip, start_odometer: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">End Odometer</label>
+                  <input 
+                    type="number" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={editingTrip.end_odometer || 0}
+                    onChange={e => setEditingTrip({...editingTrip, end_odometer: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</label>
+                <select 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all appearance-none"
+                  value={editingTrip.status}
+                  onChange={e => setEditingTrip({...editingTrip, status: e.target.value as any})}
+                >
+                  <option value="Planned">Planned</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              <button 
+                onClick={handleUpdateTrip}
+                disabled={isSaving || !editingTrip.route_name || !editingTrip.driver_id || !editingTrip.truck_id}
+                className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-emerald-600 transition-all disabled:opacity-50 shadow-xl shadow-slate-900/20 flex items-center justify-center gap-3"
+              >
+                {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                Update Trip
               </button>
             </div>
           </div>
