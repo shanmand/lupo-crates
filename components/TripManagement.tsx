@@ -14,10 +14,13 @@ const TripManagement: React.FC = () => {
   const [showNewTripModal, setShowNewTripModal] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [tripStops, setTripStops] = useState<TripStop[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const generateTripId = () => `TRIP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 10000)}`;
 
   // New Trip Form State
   const [newTrip, setNewTrip] = useState({
-    id: `TRIP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`,
+    id: generateTripId(),
     driver_id: '',
     truck_id: '',
     route_name: '',
@@ -29,7 +32,10 @@ const TripManagement: React.FC = () => {
   }, []);
 
   const fetchData = async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const [tripsRes, driversRes, trucksRes, locationsRes] = await Promise.all([
@@ -62,14 +68,23 @@ const TripManagement: React.FC = () => {
 
   const handleCreateTrip = async () => {
     setIsSaving(true);
+    setError(null);
     try {
-      const { error } = await supabase.from('trips').insert([newTrip]);
-      if (error) throw error;
+      const { error: insertError } = await supabase.from('trips').insert([newTrip]);
+      if (insertError) throw insertError;
       
       setShowNewTripModal(false);
+      setNewTrip({
+        id: generateTripId(),
+        driver_id: '',
+        truck_id: '',
+        route_name: '',
+        status: 'Planned' as const
+      });
       fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating trip:", err);
+      setError(err.message || "Failed to create trip. Please check your connection and try again.");
     } finally {
       setIsSaving(false);
     }
@@ -116,6 +131,17 @@ const TripManagement: React.FC = () => {
   return (
     <div className="space-y-8 p-8 bg-slate-50 min-h-screen">
       {/* Header Section */}
+      {!isSupabaseConfigured && (
+        <div className="p-4 bg-amber-50 border border-amber-100 rounded-3xl flex items-center gap-4 text-amber-800 shadow-sm">
+          <div className="bg-amber-500 p-2 rounded-xl text-white shadow-lg shadow-amber-500/20">
+            <AlertCircle size={20} />
+          </div>
+          <div>
+            <p className="text-sm font-black uppercase tracking-tight">Supabase Not Configured</p>
+            <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mt-0.5">Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment variables.</p>
+          </div>
+        </div>
+      )}
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-black tracking-tighter text-slate-900">MULTI-STOP LOGISTICS</h2>
@@ -297,6 +323,12 @@ const TripManagement: React.FC = () => {
               <button onClick={() => setShowNewTripModal(false)} className="text-slate-400 hover:text-slate-600"><Trash2 size={24} /></button>
             </div>
             <div className="p-8 space-y-6">
+              {error && (
+                <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-xs font-bold">
+                  <AlertCircle size={18} />
+                  {error}
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Route Name</label>
                 <input 
