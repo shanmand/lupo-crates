@@ -199,6 +199,10 @@ CREATE TABLE public.trips (
     truck_id TEXT REFERENCES public.trucks(id),
     route_name TEXT,
     status TEXT DEFAULT 'Planned', -- Planned, In Progress, Completed, Cancelled
+    scheduled_date DATE,
+    scheduled_departure_time TEXT,
+    start_odometer INTEGER,
+    end_odometer INTEGER,
     start_time TIMESTAMPTZ,
     end_time TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -757,6 +761,8 @@ ALTER TABLE public.stock_takes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_take_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.claim_audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trip_stops ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "branches_select" ON public.branches FOR SELECT TO authenticated USING (true);
 CREATE POLICY "branches_manage" ON public.branches FOR ALL TO authenticated USING (true) WITH CHECK (true);
@@ -798,6 +804,10 @@ CREATE POLICY "claim_audits_select" ON public.claim_audits FOR SELECT TO authent
 CREATE POLICY "claim_audits_manage" ON public.claim_audits FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "audit_logs_select" ON public.audit_logs FOR SELECT TO authenticated USING (true);
 CREATE POLICY "audit_logs_manage" ON public.audit_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "trips_select" ON public.trips FOR SELECT TO authenticated USING (true);
+CREATE POLICY "trips_manage" ON public.trips FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "trip_stops_select" ON public.trip_stops FOR SELECT TO authenticated USING (true);
+CREATE POLICY "trip_stops_manage" ON public.trip_stops FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- 7. SEED DATA
 INSERT INTO public.branches (id, name) VALUES ('BR-01', 'Kya Sands'), ('BR-02', 'Durban') ON CONFLICT DO NOTHING;

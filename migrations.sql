@@ -670,3 +670,9 @@ SELECT
     f.batch_id as oldest_stagnant_batch_id
 FROM branch_metrics m
 LEFT JOIN forensics f ON m.branch_id = f.branch_id;
+
+-- 19. Trip Planning Enhancements
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS scheduled_date DATE;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS scheduled_departure_time TEXT;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS start_odometer INTEGER;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS end_odometer INTEGER;

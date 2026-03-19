@@ -24,7 +24,11 @@ const TripManagement: React.FC = () => {
     driver_id: '',
     truck_id: '',
     route_name: '',
-    status: 'Planned' as const
+    status: 'Planned' as const,
+    scheduled_date: new Date().toISOString().slice(0, 10),
+    scheduled_departure_time: '08:00',
+    start_odometer: 0,
+    end_odometer: 0
   });
 
   useEffect(() => {
@@ -79,7 +83,11 @@ const TripManagement: React.FC = () => {
         driver_id: '',
         truck_id: '',
         route_name: '',
-        status: 'Planned' as const
+        status: 'Planned' as const,
+        scheduled_date: new Date().toISOString().slice(0, 10),
+        scheduled_departure_time: '08:00',
+        start_odometer: 0,
+        end_odometer: 0
       });
       fetchData();
     } catch (err: any) {
@@ -118,6 +126,129 @@ const TripManagement: React.FC = () => {
     } catch (err) {
       console.error("Error updating stop:", err);
     }
+  };
+
+  const handlePrintRouteSheet = (trip: Trip) => {
+    const driver = drivers.find(d => d.id === trip.driver_id);
+    const truck = trucks.find(t => t.id === trip.truck_id);
+    const stops = tripStops;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>Route Sheet - ${trip.id}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; color: #333; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; }
+            .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+            .meta-item { border: 1px solid #eee; padding: 15px; border-radius: 8px; }
+            .label { font-size: 10px; font-weight: bold; color: #888; text-transform: uppercase; margin-bottom: 5px; }
+            .value { font-size: 16px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background: #f8f9fa; text-align: left; padding: 12px; border-bottom: 2px solid #dee2e6; font-size: 12px; text-transform: uppercase; }
+            td { padding: 12px; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+            .odometer-section { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+            .odometer-box { border: 1px solid #000; padding: 20px; height: 60px; display: flex; align-items: flex-end; }
+            .signature-section { margin-top: 60px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+            .signature-box { border-top: 1px solid #000; padding-top: 10px; text-align: center; font-size: 12px; font-weight: bold; }
+            @media print {
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="title">ROUTE DISPATCH SHEET</div>
+              <div style="font-size: 12px; color: #666; margin-top: 5px;">Trip ID: ${trip.id}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-weight: bold;">${trip.route_name || 'Unnamed Route'}</div>
+              <div style="font-size: 12px;">Date: ${trip.scheduled_date || new Date().toLocaleDateString()}</div>
+            </div>
+          </div>
+
+          <div class="meta">
+            <div class="meta-item">
+              <div class="label">Driver Information</div>
+              <div class="value">${driver?.full_name || 'N/A'}</div>
+              <div style="font-size: 11px; color: #666;">License: ${driver?.license_number || '---'}</div>
+            </div>
+            <div class="meta-item">
+              <div class="label">Vehicle Information</div>
+              <div class="value">${truck?.plate_number || 'N/A'}</div>
+              <div style="font-size: 11px; color: #666;">Model: ${truck?.model || '---'}</div>
+            </div>
+            <div class="meta-item">
+              <div class="label">Scheduled Departure</div>
+              <div class="value">${trip.scheduled_departure_time || '---'}</div>
+            </div>
+            <div class="meta-item">
+              <div class="label">Status</div>
+              <div class="value">${trip.status}</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 50px;">Seq</th>
+                <th>Destination / Customer</th>
+                <th>Address</th>
+                <th style="width: 100px;">Arrival</th>
+                <th style="width: 100px;">Departure</th>
+                <th style="width: 150px;">Signature</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${stops.map((stop, i) => {
+                const loc = locations.find(l => l.id === stop.location_id);
+                return `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td><strong>${loc?.name || 'Unknown'}</strong><br/><span style="font-size: 10px; color: #888;">${loc?.partner_type || ''}</span></td>
+                    <td>${loc?.id || '---'}</td>
+                    <td></td>
+                    <td></td>
+                    <td style="border-bottom: 1px solid #000;"></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+
+          <div class="odometer-section">
+            <div>
+              <div class="label">Start Odometer Reading</div>
+              <div class="odometer-box"></div>
+            </div>
+            <div>
+              <div class="label">End Odometer Reading</div>
+              <div class="odometer-box"></div>
+            </div>
+          </div>
+
+          <div class="signature-section">
+            <div class="signature-box">Driver Signature</div>
+            <div class="signature-box">Manager Authorization</div>
+          </div>
+
+          <script>
+            window.onload = () => {
+              window.print();
+              // window.close(); // Optional: close after printing
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   if (isLoading) {
@@ -193,6 +324,12 @@ const TripManagement: React.FC = () => {
                   <Truck size={14} className="text-slate-400" />
                   {trucks.find(t => t.id === trip.truck_id)?.plate_number || 'Unassigned'}
                 </div>
+                {trip.scheduled_date && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-600 font-black uppercase tracking-widest pt-2 border-t border-slate-50">
+                    <Calendar size={14} />
+                    {new Date(trip.scheduled_date).toLocaleDateString()} @ {trip.scheduled_departure_time || '08:00'}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -211,9 +348,24 @@ const TripManagement: React.FC = () => {
               <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                 <div>
                   <h3 className="text-2xl font-black text-slate-900 tracking-tight">{selectedTrip.route_name}</h3>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Stop Sequence & Manifest</p>
+                  <div className="flex items-center gap-4 mt-1">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Stop Sequence & Manifest</p>
+                    {selectedTrip.scheduled_date && (
+                      <div className="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full">
+                        <Calendar size={12} />
+                        {new Date(selectedTrip.scheduled_date).toLocaleDateString()} @ {selectedTrip.scheduled_departure_time || '08:00'}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex gap-2">
+                  <button 
+                    onClick={() => handlePrintRouteSheet(selectedTrip)}
+                    className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all"
+                  >
+                    <Save size={14} />
+                    Print Route Sheet
+                  </button>
                   <select 
                     className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500"
                     onChange={(e) => handleAddStop(selectedTrip.id, e.target.value)}
@@ -338,6 +490,27 @@ const TripManagement: React.FC = () => {
                   value={newTrip.route_name}
                   onChange={e => setNewTrip({...newTrip, route_name: e.target.value})}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scheduled Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={newTrip.scheduled_date}
+                    onChange={e => setNewTrip({...newTrip, scheduled_date: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Departure Time</label>
+                  <input 
+                    type="time" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    value={newTrip.scheduled_departure_time}
+                    onChange={e => setNewTrip({...newTrip, scheduled_departure_time: e.target.value})}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
