@@ -28,7 +28,7 @@ const TripAuditTrail: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState({
-    startDate: '2025-07-01',
+    startDate: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     driverName: '',
     truckPlate: '',
@@ -37,7 +37,57 @@ const TripAuditTrail: React.FC = () => {
 
   const fetchData = async () => {
     if (!isSupabaseConfigured) {
-      setRecords([]);
+      // Mock data for demonstration
+      let mockRecords: TripAuditRecord[] = [
+        {
+          movement_id: 'MOV-001',
+          batch_id: 'B-STAG-001',
+          movement_time: new Date().toISOString(),
+          transaction_date: new Date().toISOString().split('T')[0],
+          quantity: 120,
+          condition: 'Clean',
+          route_instructions: 'Direct delivery to main plant',
+          from_location: 'Crate Suppliers JHB',
+          to_location: 'Lupo JHB Main Plant (Kya Sands)',
+          driver_name: 'John Doe',
+          truck_plate: 'GP 123 SH',
+          branch_id: 'BR-01',
+          shift_start: new Date().toISOString(),
+          shift_end: null,
+          manual_end_time: null,
+          shift_notes: 'Morning shift'
+        },
+        {
+          movement_id: 'MOV-002',
+          batch_id: 'B-STAG-002',
+          movement_time: new Date(Date.now() - 86400000).toISOString(),
+          transaction_date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+          quantity: 45,
+          condition: 'Clean',
+          route_instructions: 'Inter-branch transfer',
+          from_location: 'Lupo JHB Main Plant (Kya Sands)',
+          to_location: 'Lupo Durban Plant',
+          driver_name: 'Jane Smith',
+          truck_plate: 'GP 456 SH',
+          branch_id: 'BR-01',
+          shift_start: new Date(Date.now() - 86400000).toISOString(),
+          shift_end: new Date(Date.now() - 86400000 + 28800000).toISOString(),
+          manual_end_time: null,
+          shift_notes: 'Long haul'
+        }
+      ];
+
+      // Apply filters to mock data
+      mockRecords = mockRecords.filter(r => {
+        const dateMatch = r.transaction_date >= filters.startDate && r.transaction_date <= filters.endDate;
+        const driverMatch = !filters.driverName || r.driver_name.toLowerCase().includes(filters.driverName.toLowerCase());
+        const truckMatch = !filters.truckPlate || r.truck_plate.toLowerCase().includes(filters.truckPlate.toLowerCase());
+        const branchMatch = !filters.branchId || r.branch_id === filters.branchId;
+        return dateMatch && driverMatch && truckMatch && branchMatch;
+      });
+
+      setRecords(mockRecords);
+      setBranches([{ id: 'BR-01', name: 'Kya Sands' }, { id: 'BR-02', name: 'Durban' }]);
       setIsLoading(false);
       return;
     }

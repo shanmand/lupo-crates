@@ -234,6 +234,7 @@ export interface BatchMovement {
   batch_id: string;
   from_location_id: string;
   to_location_id: string;
+  quantity: number;
   truck_id?: string;
   driver_id?: string;
   timestamp: string;

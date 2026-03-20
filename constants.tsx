@@ -78,6 +78,7 @@ const generateMockData = () => {
       batch_id: batchId,
       from_location_id: 'LOC-JHB-01',
       to_location_id: locId,
+      quantity: qty,
       timestamp: date,
       condition: Math.random() > 0.05 ? MovementCondition.CLEAN : MovementCondition.DIRTY,
       origin_user_id: 'U-003',

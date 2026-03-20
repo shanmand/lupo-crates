@@ -204,6 +204,7 @@ CREATE TABLE public.trips (
     scheduled_departure_time TEXT,
     start_odometer INTEGER,
     end_odometer INTEGER,
+    start_location_id TEXT,
     start_time TIMESTAMPTZ,
     end_time TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
