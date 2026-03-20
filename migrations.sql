@@ -712,6 +712,3 @@ SELECT
     name || ' (' || party_type || ')' as display_name,
     2 as sort_group
 FROM public.business_parties;
-
--- Add start_location_id to trips
-ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS start_location_id TEXT;

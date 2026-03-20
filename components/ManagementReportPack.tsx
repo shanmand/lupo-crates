@@ -36,19 +36,19 @@ import {
 } from 'recharts';
 import { format, differenceInDays, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { Truck as TruckType, Driver, Branch, Task, ManagementKPIs, LocationUnconfirmedValue, BatchAccrual, BranchFleetExpense } from '../types';
+import { Truck as TruckType, Driver, Branch, Task, FleetExpense } from '../types';
 
 const ManagementReportPack: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [kpis, setKpis] = useState<ManagementKPIs | null>(null);
-  const [unconfirmedValue, setUnconfirmedValue] = useState<LocationUnconfirmedValue[]>([]);
-  const [accruals, setAccruals] = useState<BatchAccrual[]>([]);
+  const [kpis, setKpis] = useState<any>(null);
+  const [unconfirmedValue, setUnconfirmedValue] = useState<any[]>([]);
+  const [accruals, setAccruals] = useState<any[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [fleetExpenses, setFleetExpenses] = useState<BranchFleetExpense[]>([]);
+  const [fleetExpenses, setFleetExpenses] = useState<FleetExpense[]>([]);
 
   const fetchData = async () => {
     if (!isSupabaseConfigured) return;

@@ -14,8 +14,6 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [currentPage, setCurrentPage] = useState(0);
-  const PAGE_SIZE = 50;
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,8 +66,6 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  const paginatedAssets = filteredAssets.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-
   const totalCrates = assets.filter(a => a.asset_type === 'Crate').length;
   const totalPallets = assets.filter(a => a.asset_type === 'Pallet').length;
 
@@ -104,35 +100,27 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     try {
       if (isSupabaseConfigured) {
         if (editingAsset) {
-          // Update logic mapping to batches table
+          // Update logic (mapping to asset_master or similar)
           const { error } = await supabase
-            .from('batches')
+            .from('asset_master')
             .update({
-              status: formData.status,
-              condition: formData.condition,
-              // Note: asset_id, ownership etc might be in asset_master joined via asset_id
+              type: formData.asset_type,
+              ownership_type: formData.ownership,
+              // Add other fields as they map to your schema
             })
             .eq('id', formData.asset_code);
-          if (error) {
-            console.log("Supabase Update Error (batches):", error);
-            throw error;
-          }
+          if (error) throw error;
         } else {
-          // Insert logic mapping to batches table
+          // Insert logic
           const { error } = await supabase
-            .from('batches')
+            .from('asset_master')
             .insert([{
               id: formData.asset_code,
-              asset_id: formData.asset_type === 'Crate' ? 'CRT-STD' : 'PLT-STD', // Example mapping
-              status: formData.status,
-              condition: formData.condition,
-              quantity: 1, // Defaulting to 1 for individual asset registration
-              current_location_id: 'WH-001' // Default warehouse
+              type: formData.asset_type,
+              ownership_type: formData.ownership,
+              // Add other fields
             }]);
-          if (error) {
-            console.log("Supabase Insert Error (batches):", error);
-            throw error;
-          }
+          if (error) throw error;
         }
       }
       setIsModalOpen(false);
@@ -150,13 +138,10 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     try {
       if (isSupabaseConfigured) {
         const { error } = await supabase
-          .from('batches')
+          .from('asset_master')
           .delete()
           .eq('id', assetCode);
-        if (error) {
-          console.log("Supabase Delete Error (batches):", error);
-          throw error;
-        }
+        if (error) throw error;
       }
       fetchData();
     } catch (err) {
@@ -214,20 +199,14 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
               placeholder="Search Asset Code or Customer..." 
               className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-sm font-bold text-slate-900"
               value={searchTerm}
-              onChange={e => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(0);
-              }}
+              onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex gap-4">
             <select 
               className="px-6 py-4 rounded-2xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all cursor-pointer"
               value={typeFilter}
-              onChange={e => {
-                setTypeFilter(e.target.value);
-                setCurrentPage(0);
-              }}
+              onChange={e => setTypeFilter(e.target.value)}
             >
               <option value="All">All Types</option>
               <option value="Crate">Crates</option>
@@ -236,10 +215,7 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
             <select 
               className="px-6 py-4 rounded-2xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-slate-700 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all cursor-pointer"
               value={statusFilter}
-              onChange={e => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(0);
-              }}
+              onChange={e => setStatusFilter(e.target.value)}
             >
               <option value="All">All Statuses</option>
               <option value="Available">Available</option>
@@ -277,7 +253,7 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedAssets.map((asset, i) => (
+              {filteredAssets.map((asset, i) => (
                 <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="px-8 py-6 font-black text-slate-900 text-sm tracking-tight">{asset.asset_code}</td>
                   <td className="px-8 py-6 text-xs font-bold text-slate-600 uppercase tracking-wider">{asset.asset_type}</td>
@@ -330,29 +306,6 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
           </table>
         </div>
       </div>
-
-      {/* Pagination Controls */}
-      {filteredAssets.length > PAGE_SIZE && (
-        <div className="flex justify-center items-center gap-4 pt-4">
-          <button 
-            disabled={currentPage === 0}
-            onClick={() => setCurrentPage(prev => prev - 1)}
-            className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-600 disabled:opacity-30 hover:bg-slate-50 transition-all"
-          >
-            Previous
-          </button>
-          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
-            Page {currentPage + 1} of {Math.ceil(filteredAssets.length / PAGE_SIZE)}
-          </span>
-          <button 
-            disabled={(currentPage + 1) * PAGE_SIZE >= filteredAssets.length}
-            onClick={() => setCurrentPage(prev => prev + 1)}
-            className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-600 disabled:opacity-30 hover:bg-slate-50 transition-all"
-          >
-            Next
-          </button>
-        </div>
-      )}
 
       {/* Add/Edit Modal */}
       {isModalOpen && (

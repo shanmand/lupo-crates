@@ -1,14 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Calendar, Plus, ChevronRight, CheckCircle2, Clock, User, Navigation, AlertCircle, Loader2, Save, Trash2, ArrowRight, ArrowUp, ArrowDown, Edit } from 'lucide-react';
-import { APIProvider, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Trip, TripStop, Driver, Truck as TruckType, Source } from '../types';
 
 const TripManagement: React.FC = () => {
-  const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || '';
-  const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
-
   const [trips, setTrips] = useState<Trip[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
@@ -28,7 +24,6 @@ const TripManagement: React.FC = () => {
     id: generateTripId(),
     driver_id: '',
     truck_id: '',
-    start_location_id: '',
     route_name: '',
     status: 'Planned' as const,
     scheduled_date: new Date().toISOString().slice(0, 10),
@@ -90,7 +85,6 @@ const TripManagement: React.FC = () => {
         id: generateTripId(),
         driver_id: '',
         truck_id: '',
-        start_location_id: '',
         route_name: '',
         status: 'Planned' as const,
         scheduled_date: new Date().toISOString().slice(0, 10),
@@ -175,7 +169,6 @@ const TripManagement: React.FC = () => {
         .update({
           driver_id: editingTrip.driver_id,
           truck_id: editingTrip.truck_id,
-          start_location_id: editingTrip.start_location_id,
           route_name: editingTrip.route_name,
           status: editingTrip.status,
           scheduled_date: editingTrip.scheduled_date,
@@ -212,64 +205,6 @@ const TripManagement: React.FC = () => {
     } catch (err) {
       console.error("Error deleting trip:", err);
     }
-  };
-
-  const DistanceEstimator: React.FC<{ trip: Trip; stops: TripStop[]; locations: Source[] }> = ({ trip, stops, locations }) => {
-    const routesLib = useMapsLibrary('routes');
-    const [totalKm, setTotalKm] = useState<number | null>(null);
-    const [isCalculating, setIsCalculating] = useState(false);
-
-    useEffect(() => {
-      const calculateDistance = async () => {
-        if (!routesLib || !trip.start_location_id || stops.length === 0) {
-          setTotalKm(null);
-          return;
-        }
-
-        setIsCalculating(true);
-        try {
-          const startLoc = locations.find(l => l.id === trip.start_location_id);
-          if (!startLoc?.address) return;
-
-          let totalDistance = 0;
-          let currentOrigin = startLoc.address;
-
-          for (const stop of stops) {
-            const destLoc = locations.find(l => l.id === stop.location_id);
-            if (!destLoc?.address) continue;
-
-            const response = await routesLib.Route.computeRoutes({
-              origin: currentOrigin,
-              destination: destLoc.address,
-              travelMode: 'DRIVING',
-              fields: ['distanceMeters'],
-            });
-
-            if (response.routes?.[0]?.distanceMeters) {
-              totalDistance += response.routes[0].distanceMeters;
-              currentOrigin = destLoc.address;
-            }
-          }
-
-          setTotalKm(totalDistance / 1000);
-        } catch (err) {
-          console.error("Error calculating total distance:", err);
-        } finally {
-          setIsCalculating(false);
-        }
-      };
-
-      calculateDistance();
-    }, [routesLib, trip.start_location_id, stops, locations]);
-
-    if (!trip.start_location_id || stops.length === 0) return null;
-
-    return (
-      <div className="flex items-center gap-2 text-xs font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full">
-        <Navigation size={12} />
-        {isCalculating ? 'Calculating...' : `${totalKm?.toFixed(1) || '--'} KM Estimated`}
-      </div>
-    );
   };
 
   const updateStopStatus = async (stopId: string, status: string) => {
@@ -417,42 +352,8 @@ const TripManagement: React.FC = () => {
     );
   }
 
-  if (!hasValidKey) {
-    return (
-      <div className="flex items-center justify-center min-h-screen p-8 bg-slate-50">
-        <div className="max-w-lg w-full bg-white rounded-[2.5rem] p-12 shadow-2xl border border-slate-100 text-center space-y-8">
-          <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto text-emerald-600">
-            <AlertCircle size={40} />
-          </div>
-          <div className="space-y-4">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Google Maps API Key Required</h2>
-            <p className="text-slate-500 font-bold leading-relaxed">To estimate trip distances and use mapping features, you need to configure your Google Maps Platform API Key.</p>
-          </div>
-          
-          <div className="space-y-6 text-left bg-slate-50 p-8 rounded-3xl border border-slate-100">
-            <div className="flex gap-4">
-              <div className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-black shrink-0">1</div>
-              <p className="text-xs font-bold text-slate-700">Get an API Key from the <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener" className="text-emerald-600 underline">Google Cloud Console</a>.</p>
-            </div>
-            <div className="flex gap-4">
-              <div className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-black shrink-0">2</div>
-              <p className="text-xs font-bold text-slate-700">Open <strong>Settings</strong> (⚙️ gear icon, top-right) → <strong>Secrets</strong>.</p>
-            </div>
-            <div className="flex gap-4">
-              <div className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-black shrink-0">3</div>
-              <p className="text-xs font-bold text-slate-700">Add <code>GOOGLE_MAPS_PLATFORM_KEY</code> as the secret name and paste your key.</p>
-            </div>
-          </div>
-          
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">The app will rebuild automatically after you add the secret.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <APIProvider apiKey={API_KEY} version="weekly">
-      <div className="space-y-8 p-8 bg-slate-50 min-h-screen">
+    <div className="space-y-8 p-8 bg-slate-50 min-h-screen">
       {/* Header Section */}
       {!isSupabaseConfigured && (
         <div className="p-4 bg-amber-50 border border-amber-100 rounded-3xl flex items-center gap-4 text-amber-800 shadow-sm">
@@ -568,11 +469,6 @@ const TripManagement: React.FC = () => {
                         {new Date(selectedTrip.scheduled_date).toLocaleDateString()} @ {selectedTrip.scheduled_departure_time || '08:00'}
                       </div>
                     )}
-                    <DistanceEstimator 
-                      startLocationId={selectedTrip.start_location_id} 
-                      stops={tripStops} 
-                      locations={locations} 
-                    />
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -733,18 +629,6 @@ const TripManagement: React.FC = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Starting Point</label>
-                <select 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all appearance-none"
-                  value={newTrip.start_location_id}
-                  onChange={e => setNewTrip({...newTrip, start_location_id: e.target.value})}
-                >
-                  <option value="">Select Starting Point</option>
-                  {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.display_name}</option>)}
-                </select>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scheduled Date</label>
@@ -850,18 +734,6 @@ const TripManagement: React.FC = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Starting Point</label>
-                <select 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all appearance-none"
-                  value={editingTrip.start_location_id || ''}
-                  onChange={e => setEditingTrip({...editingTrip, start_location_id: e.target.value})}
-                >
-                  <option value="">Select Starting Point</option>
-                  {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.display_name}</option>)}
-                </select>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scheduled Date</label>
@@ -956,7 +828,6 @@ const TripManagement: React.FC = () => {
         </div>
       )}
     </div>
-    </APIProvider>
   );
 };
 

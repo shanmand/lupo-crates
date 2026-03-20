@@ -30,14 +30,14 @@ import {
 import { format, isWithinInterval, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured, getSignedFleetDocumentUrl } from '../supabase';
-import { FleetExpense, TruckRoadworthyHistory, Branch, FleetReadiness } from '../types';
+import { FleetExpense, TruckRoadworthyHistory, Branch } from '../types';
 
 const FleetExpenseReport: React.FC = () => {
   const [expenses, setExpenses] = useState<FleetExpense[]>([]);
   const [roadworthyHistory, setRoadworthyHistory] = useState<TruckRoadworthyHistory[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [readiness, setReadiness] = useState<FleetReadiness[]>([]);
+  const [readiness, setReadiness] = useState<any[]>([]);
   const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 

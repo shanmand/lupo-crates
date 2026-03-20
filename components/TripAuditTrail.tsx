@@ -2,14 +2,33 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, User, Truck, FileText, Printer, Loader2, Filter, ArrowRight, MapPin, Clock, Building2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { Branch, TripAuditTrail as TripAuditRecord } from '../types';
+import { Branch } from '../types';
+
+interface TripAuditRecord {
+  movement_id: string;
+  batch_id: string;
+  movement_time: string;
+  transaction_date: string;
+  quantity: number;
+  condition: string;
+  route_instructions: string | null;
+  from_location: string;
+  to_location: string;
+  driver_name: string;
+  truck_plate: string;
+  branch_id: string;
+  shift_start: string | null;
+  shift_end: string | null;
+  manual_end_time: string | null;
+  shift_notes: string | null;
+}
 
 const TripAuditTrail: React.FC = () => {
   const [records, setRecords] = useState<TripAuditRecord[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState({
-    startDate: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0],
+    startDate: '2025-07-01',
     endDate: new Date().toISOString().split('T')[0],
     driverName: '',
     truckPlate: '',
@@ -18,63 +37,7 @@ const TripAuditTrail: React.FC = () => {
 
   const fetchData = async () => {
     if (!isSupabaseConfigured) {
-      // Mock data for demonstration
-      let mockRecords: TripAuditRecord[] = [
-        {
-          movement_id: 'MOV-001',
-          batch_id: 'B-STAG-001',
-          movement_time: new Date().toISOString(),
-          transaction_date: new Date().toISOString().split('T')[0],
-          quantity: 120,
-          condition: 'Clean',
-          route_instructions: 'Direct delivery to main plant',
-          from_location: 'Crate Suppliers JHB',
-          to_location: 'Lupo JHB Main Plant (Kya Sands)',
-          driver_name: 'John Doe',
-          driver_id: 'D-001',
-          truck_plate: 'GP 123 SH',
-          truck_id: 'T-001',
-          branch_id: 'BR-01',
-          shift_id: 'S-001',
-          shift_start: new Date().toISOString(),
-          shift_end: '',
-          manual_end_time: '',
-          shift_notes: 'Morning shift'
-        },
-        {
-          movement_id: 'MOV-002',
-          batch_id: 'B-STAG-002',
-          movement_time: new Date(Date.now() - 86400000).toISOString(),
-          transaction_date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-          quantity: 45,
-          condition: 'Clean',
-          route_instructions: 'Inter-branch transfer',
-          from_location: 'Lupo JHB Main Plant (Kya Sands)',
-          to_location: 'Lupo Durban Plant',
-          driver_name: 'Jane Smith',
-          driver_id: 'D-002',
-          truck_plate: 'GP 456 SH',
-          truck_id: 'T-002',
-          branch_id: 'BR-01',
-          shift_id: 'S-002',
-          shift_start: new Date(Date.now() - 86400000).toISOString(),
-          shift_end: new Date(Date.now() - 86400000 + 28800000).toISOString(),
-          manual_end_time: '',
-          shift_notes: 'Long haul'
-        }
-      ];
-
-      // Apply filters to mock data
-      mockRecords = mockRecords.filter(r => {
-        const dateMatch = r.transaction_date >= filters.startDate && r.transaction_date <= filters.endDate;
-        const driverMatch = !filters.driverName || r.driver_name.toLowerCase().includes(filters.driverName.toLowerCase());
-        const truckMatch = !filters.truckPlate || r.truck_plate.toLowerCase().includes(filters.truckPlate.toLowerCase());
-        const branchMatch = !filters.branchId || filters.branchId === 'Consolidated' || r.branch_id === filters.branchId;
-        return dateMatch && driverMatch && truckMatch && branchMatch;
-      });
-
-      setRecords(mockRecords);
-      setBranches([{ id: 'BR-01', name: 'Kya Sands' }, { id: 'BR-02', name: 'Durban' }]);
+      setRecords([]);
       setIsLoading(false);
       return;
     }
@@ -97,7 +60,7 @@ const TripAuditTrail: React.FC = () => {
       if (filters.truckPlate) {
         query = query.ilike('truck_plate', `%${filters.truckPlate}%`);
       }
-      if (filters.branchId && filters.branchId !== 'Consolidated') {
+      if (filters.branchId) {
         query = query.eq('branch_id', filters.branchId);
       }
 
@@ -182,7 +145,7 @@ const TripAuditTrail: React.FC = () => {
               value={filters.branchId}
               onChange={e => setFilters({...filters, branchId: e.target.value})}
             >
-              <option value="Consolidated">Consolidated (All Branches)</option>
+              <option value="">All Branches</option>
               {branches.map(b => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
