@@ -15,25 +15,16 @@ import {
   Trash2
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-
+import { BusinessDirectoryEntry } from '../types';
 import { AddressAutocomplete } from './AddressAutocomplete';
 
-interface BusinessPartner {
-  id: string;
-  name: string;
-  party_type: string;
-  asset_types: number;
-  current_stock: number;
-  address?: string;
-}
-
 const BusinessDirectory: React.FC = () => {
-  const [partners, setPartners] = useState<BusinessPartner[]>([]);
+  const [partners, setPartners] = useState<BusinessDirectoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [isAdding, setIsAdding] = useState(false);
-  const [editingPartner, setEditingPartner] = useState<BusinessPartner | null>(null);
+  const [editingPartner, setEditingPartner] = useState<BusinessDirectoryEntry | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

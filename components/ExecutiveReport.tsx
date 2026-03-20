@@ -2,22 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { Award, TrendingDown, Clock, ShieldAlert, User as UserIcon, MapPin, Calculator, ArrowRight, Info, AlertTriangle, TrendingUp, Search, Loader2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-
-interface ExecutiveReportData {
-  branch_id: string;
-  branch_name: string;
-  total_units: number;
-  stagnant_units: number;
-  financial_drainage: number;
-  lost_units: number;
-  loss_ratio: number;
-  oldest_stagnant_driver: string | null;
-  oldest_stagnant_location: string | null;
-  oldest_stagnant_batch_id: string | null;
-}
+import { ExecutiveReportRow } from '../types';
 
 const ExecutiveReport: React.FC = () => {
-  const [reportData, setReportData] = useState<ExecutiveReportData[]>([]);
+  const [reportData, setReportData] = useState<ExecutiveReportRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

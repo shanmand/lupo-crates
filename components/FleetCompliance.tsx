@@ -22,13 +22,13 @@ import {
   Paperclip
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, getSignedFleetDocumentUrl } from '../supabase';
-import { Truck, Driver, Branch, TruckRoadworthyHistory, UserRole } from '../types';
+import { Truck, Driver, Branch, TruckRoadworthyHistory, UserRole, FleetReadiness } from '../types';
 import BranchSelector from './BranchSelector';
 import { useUser } from '../UserContext';
 
 const FleetCompliance: React.FC = () => {
   const { profile } = useUser();
-  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [trucks, setTrucks] = useState<FleetReadiness[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [roadworthyHistory, setRoadworthyHistory] = useState<TruckRoadworthyHistory[]>([]);
@@ -58,7 +58,7 @@ const FleetCompliance: React.FC = () => {
     setIsLoading(true);
     try {
       const [trucksRes, driversRes, branchesRes, historyRes] = await Promise.all([
-        supabase.from('trucks').select('*'),
+        supabase.from('vw_fleet_readiness').select('*'),
         supabase.from('drivers').select('*').eq('is_active', true),
         supabase.from('branches').select('*').order('name'),
         supabase.from('truck_roadworthy_history').select('*').order('test_date', { ascending: false })
@@ -365,10 +365,10 @@ const FleetCompliance: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filteredTrucks.map(truck => (
-                  <tr key={truck.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={truck.truck_id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <p className="font-black text-slate-900 text-sm">{truck.plate_number}</p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{branches.find(b => b.id === truck.branch_id)?.name || 'N/A'}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">{truck.branch_name || 'N/A'}</p>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -376,24 +376,21 @@ const FleetCompliance: React.FC = () => {
                           <Calendar size={12} />
                           {truck.license_disc_expiry || 'NO DATE'}
                         </div>
-                        {truck.license_doc_url && (
-                          <button 
-                            onClick={() => handleViewDocument(truck.license_doc_url!, 'truck')}
-                            className="p-1.5 text-slate-400 hover:text-slate-900 transition-colors"
-                            title="View License Disc"
-                          >
-                            <Paperclip size={14} />
-                          </button>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => setSelectedTruckId(truck.id)}
-                        className={`p-2 rounded-lg transition-all ${selectedTruckId === truck.id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400 hover:text-slate-600'}`}
-                      >
-                        <HistoryIcon size={16} />
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${getStatusColor(truck.roadworthy_expiry || undefined)}`}>
+                          <ShieldCheck size={12} />
+                          {truck.roadworthy_expiry ? new Date(truck.roadworthy_expiry).toLocaleDateString() : 'No Record'}
+                        </div>
+                        <button 
+                          onClick={() => setSelectedTruckId(truck.truck_id)}
+                          className={`p-2 rounded-lg transition-all ${selectedTruckId === truck.truck_id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400 hover:text-slate-600'}`}
+                        >
+                          <HistoryIcon size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -412,14 +409,14 @@ const FleetCompliance: React.FC = () => {
                 <FileText size={24} />
               </div>
               <div>
-                <h4 className="font-black text-lg text-slate-900 uppercase tracking-tight">Roadworthy History: {trucks.find(t => t.id === selectedTruckId)?.plate_number}</h4>
+                <h4 className="font-black text-lg text-slate-900 uppercase tracking-tight">Roadworthy History: {trucks.find(t => t.truck_id === selectedTruckId)?.plate_number}</h4>
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Historical Certificates & Test Results</p>
               </div>
             </div>
             <div className="flex items-center gap-6">
               <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Compliance Cost ({new Date().getFullYear()})</p>
-                <p className="text-xl font-black text-slate-900">R {getTotalComplianceCost.toLocaleString()}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">YTD Compliance Cost</p>
+                <p className="text-xl font-black text-slate-900">R {trucks.find(t => t.truck_id === selectedTruckId)?.ytd_roadworthy_costs.toLocaleString() || '0'}</p>
               </div>
               <div className="flex gap-3">
                 <button 

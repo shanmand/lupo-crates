@@ -2,26 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, User, Truck, FileText, Printer, Loader2, Filter, ArrowRight, MapPin, Clock, Building2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { Branch } from '../types';
-
-interface TripAuditRecord {
-  movement_id: string;
-  batch_id: string;
-  movement_time: string;
-  transaction_date: string;
-  quantity: number;
-  condition: string;
-  route_instructions: string | null;
-  from_location: string;
-  to_location: string;
-  driver_name: string;
-  truck_plate: string;
-  branch_id: string;
-  shift_start: string | null;
-  shift_end: string | null;
-  manual_end_time: string | null;
-  shift_notes: string | null;
-}
+import { Branch, TripAuditTrail as TripAuditRecord } from '../types';
 
 const TripAuditTrail: React.FC = () => {
   const [records, setRecords] = useState<TripAuditRecord[]>([]);
@@ -50,11 +31,14 @@ const TripAuditTrail: React.FC = () => {
           from_location: 'Crate Suppliers JHB',
           to_location: 'Lupo JHB Main Plant (Kya Sands)',
           driver_name: 'John Doe',
+          driver_id: 'D-001',
           truck_plate: 'GP 123 SH',
+          truck_id: 'T-001',
           branch_id: 'BR-01',
+          shift_id: 'S-001',
           shift_start: new Date().toISOString(),
-          shift_end: null,
-          manual_end_time: null,
+          shift_end: '',
+          manual_end_time: '',
           shift_notes: 'Morning shift'
         },
         {
@@ -68,11 +52,14 @@ const TripAuditTrail: React.FC = () => {
           from_location: 'Lupo JHB Main Plant (Kya Sands)',
           to_location: 'Lupo Durban Plant',
           driver_name: 'Jane Smith',
+          driver_id: 'D-002',
           truck_plate: 'GP 456 SH',
+          truck_id: 'T-002',
           branch_id: 'BR-01',
+          shift_id: 'S-002',
           shift_start: new Date(Date.now() - 86400000).toISOString(),
           shift_end: new Date(Date.now() - 86400000 + 28800000).toISOString(),
-          manual_end_time: null,
+          manual_end_time: '',
           shift_notes: 'Long haul'
         }
       ];
