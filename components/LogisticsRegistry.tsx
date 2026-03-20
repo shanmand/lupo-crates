@@ -59,6 +59,10 @@ const LogisticsRegistry: React.FC = () => {
         supabase.from('branches').select('*').order('name')
       ]);
 
+      if (trucksRes.error) console.log("Supabase Fetch Trucks Error:", trucksRes.error);
+      if (driversRes.error) console.log("Supabase Fetch Drivers Error:", driversRes.error);
+      if (branchesRes.error) console.log("Supabase Fetch Branches Error:", branchesRes.error);
+
       if (trucksRes.data) setTrucks(trucksRes.data);
       if (driversRes.data) setDrivers(driversRes.data);
       if (branchesRes.data) setBranches(branchesRes.data);
@@ -79,7 +83,10 @@ const LogisticsRegistry: React.FC = () => {
     try {
       const id = `TRK-${Math.floor(1000 + Math.random() * 9000)}`;
       const { error } = await supabase.from('trucks').insert([{ ...newTruck, id }]);
-      if (error) throw error;
+      if (error) {
+        console.log("Supabase Insert Truck Error:", error);
+        throw error;
+      }
       setNotification({ msg: `Truck ${newTruck.plate_number} registered`, type: 'success' });
       setIsAddingTruck(false);
       setNewTruck({ id: '', plate_number: '', license_disc_expiry: '', last_renewal_cost_zar: 0, branch_id: '' });
@@ -98,7 +105,10 @@ const LogisticsRegistry: React.FC = () => {
     try {
       const id = `DRV-${Math.floor(1000 + Math.random() * 9000)}`;
       const { error } = await supabase.from('drivers').insert([{ ...newDriver, id }]);
-      if (error) throw error;
+      if (error) {
+        console.log("Supabase Insert Driver Error:", error);
+        throw error;
+      }
       setNotification({ msg: `Driver ${newDriver.full_name} registered`, type: 'success' });
       setIsAddingDriver(false);
       setNewDriver({ id: '', full_name: '', contact_number: '', license_number: '', license_expiry: '', prdp_expiry: '', branch_id: '' });
@@ -128,7 +138,10 @@ const LogisticsRegistry: React.FC = () => {
         .update({ license_doc_url: path })
         .eq('id', entity.id);
 
-      if (error) throw error;
+      if (error) {
+        console.log("Supabase Update Document Error:", error);
+        throw error;
+      }
 
       if (type === 'truck') {
         setEditingTruck({ ...editingTruck!, license_doc_url: path });
@@ -169,7 +182,10 @@ const LogisticsRegistry: React.FC = () => {
           branch_id: editingTruck.branch_id
         })
         .eq('id', editingTruck.id);
-      if (error) throw error;
+      if (error) {
+        console.log("Supabase Update Truck Error:", error);
+        throw error;
+      }
       setNotification({ msg: `Truck ${editingTruck.plate_number} updated`, type: 'success' });
       setEditingTruck(null);
       fetchData();
@@ -197,7 +213,10 @@ const LogisticsRegistry: React.FC = () => {
           branch_id: editingDriver.branch_id
         })
         .eq('id', editingDriver.id);
-      if (error) throw error;
+      if (error) {
+        console.log("Supabase Update Driver Error:", error);
+        throw error;
+      }
       setNotification({ msg: `Driver ${editingDriver.full_name} updated`, type: 'success' });
       setEditingDriver(null);
       fetchData();
@@ -213,7 +232,10 @@ const LogisticsRegistry: React.FC = () => {
     if (!confirm("Decommission this truck?")) return;
     try {
       const { error } = await supabase.from('trucks').delete().eq('id', id);
-      if (error) throw error;
+      if (error) {
+        console.log("Supabase Delete Truck Error:", error);
+        throw error;
+      }
       fetchData();
     } catch (err) {
       alert("Error deleting truck");
@@ -224,7 +246,10 @@ const LogisticsRegistry: React.FC = () => {
     if (!confirm("Remove this driver?")) return;
     try {
       const { error } = await supabase.from('drivers').delete().eq('id', id);
-      if (error) throw error;
+      if (error) {
+        console.log("Supabase Delete Driver Error:", error);
+        throw error;
+      }
       fetchData();
     } catch (err) {
       alert("Error deleting driver");

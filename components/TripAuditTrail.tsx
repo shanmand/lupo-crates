@@ -82,7 +82,7 @@ const TripAuditTrail: React.FC = () => {
         const dateMatch = r.transaction_date >= filters.startDate && r.transaction_date <= filters.endDate;
         const driverMatch = !filters.driverName || r.driver_name.toLowerCase().includes(filters.driverName.toLowerCase());
         const truckMatch = !filters.truckPlate || r.truck_plate.toLowerCase().includes(filters.truckPlate.toLowerCase());
-        const branchMatch = !filters.branchId || r.branch_id === filters.branchId;
+        const branchMatch = !filters.branchId || filters.branchId === 'Consolidated' || r.branch_id === filters.branchId;
         return dateMatch && driverMatch && truckMatch && branchMatch;
       });
 
@@ -110,7 +110,7 @@ const TripAuditTrail: React.FC = () => {
       if (filters.truckPlate) {
         query = query.ilike('truck_plate', `%${filters.truckPlate}%`);
       }
-      if (filters.branchId) {
+      if (filters.branchId && filters.branchId !== 'Consolidated') {
         query = query.eq('branch_id', filters.branchId);
       }
 
@@ -195,7 +195,7 @@ const TripAuditTrail: React.FC = () => {
               value={filters.branchId}
               onChange={e => setFilters({...filters, branchId: e.target.value})}
             >
-              <option value="">All Branches</option>
+              <option value="Consolidated">Consolidated (All Branches)</option>
               {branches.map(b => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}

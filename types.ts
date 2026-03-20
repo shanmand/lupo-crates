@@ -220,8 +220,9 @@ export interface Batch {
   asset_id: string;
   quantity: number;
   current_location_id: string;
-  created_at: string;
   status: 'Pending' | 'Success' | 'Lost' | 'In-Transit' | 'Settled';
+  condition: MovementCondition;
+  created_at?: string;
   is_settled?: boolean;
   settled_at?: string;
   transaction_date?: string;
@@ -234,13 +235,14 @@ export interface BatchMovement {
   batch_id: string;
   from_location_id: string;
   to_location_id: string;
-  quantity: number;
+  transaction_date: string;
+  route_instructions?: string;
+  quantity?: number;
   truck_id?: string;
   driver_id?: string;
-  timestamp: string;
-  condition: MovementCondition;
-  origin_user_id: string;
-  transaction_date?: string;
+  timestamp?: string;
+  condition?: MovementCondition;
+  origin_user_id?: string;
 }
 
 export interface LogisticsTrace {
@@ -366,11 +368,15 @@ export interface DashboardStats {
 }
 
 export interface BatchForensics {
-  date: string;
-  type: string;
-  from_location: string;
-  to_location: string;
+  movement_id: string;
+  batch_id: string;
+  transaction_date: string;
   quantity: number;
+  from_location_name: string;
+  to_location_name: string;
+  driver_name: string;
+  truck_plate: string;
+  branch_id: string;
 }
 
 export interface AssetIntelligence {
