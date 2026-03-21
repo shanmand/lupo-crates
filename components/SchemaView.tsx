@@ -612,27 +612,50 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) ds ON TRUE;
 
+-- Create/Update the Dashboard Stats View
+DROP VIEW IF EXISTS public.vw_dashboard_stats;
+CREATE OR REPLACE VIEW public.vw_dashboard_stats AS
+SELECT
+    br.name as branch_name,
+    COALESCE(SUM(CASE WHEN s.category = 'Home' AND s.type != 'In Transit' THEN b.quantity ELSE 0 END), 0) as available,
+    COALESCE(SUM(CASE WHEN s.partner_type = 'Customer' THEN b.quantity ELSE 0 END), 0) as at_customers,
+    COALESCE(SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END), 0) as in_transit,
+    COALESCE(SUM(CASE WHEN b.status = 'Maintenance' THEN b.quantity ELSE 0 END), 0) as maintenance,
+    COALESCE(SUM(b.quantity), 0) as total_fleet,
+    -- Financial Alerts
+    COALESCE(SUM(CASE WHEN b.status = 'Lost' THEN b.quantity ELSE 0 END), 0) as lost_missing,
+    COALESCE(SUM(CASE WHEN b.status = 'Damaged' THEN b.quantity ELSE 0 END), 0) as damaged,
+    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as pending_charges,
+    (SELECT COUNT(*) FROM public.asset_losses al JOIN public.locations l ON al.last_known_location_id = l.id WHERE al.is_settled = FALSE AND l.branch_id = br.id) as open_loss_cases,
+    -- Liability
+    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as accrued_rental,
+    (SELECT COALESCE(SUM(net_payable), 0) FROM public.settlements st WHERE st.supplier_id IN (SELECT id FROM public.locations WHERE branch_id = br.id)) as settlement_liability,
+    (SELECT COUNT(DISTINCT id) FROM public.locations WHERE partner_type = 'Customer' AND branch_id = br.id) as active_customers,
+    (SELECT COALESCE(SUM(quantity), 0) FROM public.batch_movements bm JOIN public.locations l ON bm.to_location_id = l.id WHERE bm.transaction_date = CURRENT_DATE AND l.branch_id = br.id) as movements_today
+FROM public.branches br
+LEFT JOIN public.locations s ON s.branch_id = br.id
+LEFT JOIN public.batches b ON b.current_location_id = s.id
+GROUP BY br.id, br.name;
+
 -- Create/Update the Batch Forensics View
 DROP VIEW IF EXISTS public.vw_batch_forensics;
 CREATE OR REPLACE VIEW public.vw_batch_forensics AS
 SELECT 
-    bm.id AS movement_id,
+    bm.transaction_date as date,
+    COALESCE(bm.condition, 'unknown') as type,
     bm.batch_id,
-    bm.transaction_date,
-    bm.timestamp,
-    d.full_name AS driver_name,
+    s_from.name as from_location,
+    s_to.name as to_location,
+    d.full_name as driver_name,
     bm.quantity,
-    s_to.name AS to_location_name,
-    s_to.id AS to_location_id,
-    s_from.name AS from_location_name,
-    t.plate_number AS truck_plate,
-    bm.condition,
-    s_to.branch_id
+    br.name as branch_name,
+    bm.timestamp
 FROM public.batch_movements bm
-LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
 LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
 LEFT JOIN public.drivers d ON bm.driver_id = d.id
-LEFT JOIN public.trucks t ON bm.truck_id = t.id;
+LEFT JOIN public.branches br ON s_to.branch_id = br.id
+ORDER BY bm.timestamp DESC;
 
 -- Sample Data for Audit Trail
 INSERT INTO public.branches (id, name) VALUES ('BR-001', 'Johannesburg Central') ON CONFLICT DO NOTHING;

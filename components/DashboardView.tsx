@@ -15,6 +15,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<BatchForensics[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -24,6 +25,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
       }
 
       setIsLoading(true);
+      setSchemaError(null);
       try {
         let statsQuery = supabase.from('vw_dashboard_stats').select('*');
         let activityQuery = supabase.from('vw_batch_forensics').select('*').limit(20);
@@ -35,11 +37,16 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
         const [statsRes, activityRes] = await Promise.all([
           branchContext === 'Consolidated' ? statsQuery : statsQuery.single(),
-          activityQuery.order('date', { ascending: false })
+          activityQuery.order('timestamp', { ascending: false })
         ]);
 
         if (statsRes.error) console.log("Supabase Stats Error:", statsRes.error);
-        if (activityRes.error) console.log("Supabase Activity Error:", activityRes.error);
+        if (activityRes.error) {
+          console.log("Supabase Activity Error:", activityRes.error);
+          if (activityRes.error.code === '42703') {
+            setSchemaError("The database view 'vw_batch_forensics' is outdated. Please run the migrations in the Schema tab.");
+          }
+        }
 
         if (branchContext === 'Consolidated' && Array.isArray(statsRes.data)) {
           const consolidated = statsRes.data.reduce((acc, curr) => ({
@@ -166,7 +173,15 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
       {/* Recent Activity Table */}
       <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
         <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
-          <h3 className="text-sm font-black uppercase tracking-widest text-emerald-500">Recent Activity Log</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-black uppercase tracking-widest text-emerald-500">Recent Activity Log</h3>
+            {schemaError && (
+              <div className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                <AlertTriangle size={10} />
+                Schema Outdated
+              </div>
+            )}
+          </div>
           <span className="text-[10px] font-bold text-slate-500 uppercase">Last 20 Movements</span>
         </div>
         <div className="overflow-x-auto">
@@ -186,16 +201,16 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
               {recentActivity.map((activity, i) => (
                 <tr key={i} className="hover:bg-slate-800/30 transition-colors group">
                   <td className="px-6 py-4 text-xs font-bold text-slate-300">
-                    {activity.date ? new Date(activity.date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                    {(activity.date || (activity as any).transaction_date) ? new Date(activity.date || (activity as any).transaction_date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
                   </td>
                   <td className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">
-                    {activity.type || 'unknown'}
+                    {activity.type || (activity as any).condition || 'unknown'}
                   </td>
                   <td className="px-6 py-4 text-xs font-bold text-emerald-500">
                     {activity.batch_id}
                   </td>
-                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.from_location || 'N/A'}</td>
-                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.to_location || 'N/A'}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.from_location || (activity as any).from_location_name || 'N/A'}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.to_location || (activity as any).to_location_name || 'N/A'}</td>
                   <td className="px-6 py-4 text-xs text-slate-400">{activity.driver_name || 'N/A'}</td>
                   <td className="px-6 py-4 text-xs font-black text-emerald-400 text-right tabular-nums">{activity.quantity || 0}</td>
                 </tr>

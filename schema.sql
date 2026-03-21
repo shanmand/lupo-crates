@@ -1051,7 +1051,8 @@ SELECT
     s_to.name as to_location,
     d.full_name as driver_name,
     bm.quantity,
-    br.name as branch_name
+    br.name as branch_name,
+    bm.timestamp
 FROM public.batch_movements bm
 LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
 LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
