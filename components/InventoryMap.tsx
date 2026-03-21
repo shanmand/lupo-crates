@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { MOCK_BATCHES, MOCK_LOCATIONS } from '../constants';
 import { MapPin, Building2, Flame, TrendingUp, Zap, Clock, AlertCircle, Loader2 } from 'lucide-react';
 
 interface InventoryRecord {
@@ -18,7 +19,22 @@ const InventoryMap: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!isSupabaseConfigured) return;
+      if (!isSupabaseConfigured) {
+        console.log('InventoryMap: Using mock data...');
+        const mockData = MOCK_BATCHES.map(b => {
+          const loc = MOCK_LOCATIONS.find(l => l.id === b.current_location_id);
+          return {
+            ...b,
+            batch_id: b.id,
+            current_location: loc?.name || 'Unknown',
+            branch_name: loc?.branch_id === 'BR-01' ? 'Kya Sands' : (loc?.branch_id === 'BR-02' ? 'Durban' : 'Consolidated'),
+            daily_accrued_liability: (b as any).accrued_amount || 0
+          };
+        });
+        setData(mockData);
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
       try {
         const { data: results, error } = await supabase

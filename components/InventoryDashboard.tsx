@@ -40,11 +40,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext =
     const fetchData = async () => {
       console.log('InventoryDashboard: Fetching data... Configured:', isSupabaseConfigured);
       if (!isSupabaseConfigured) {
-        setLocations([]);
-        setBatches([]);
-        setAssets([]);
-        setFees([]);
-        setBranches([]);
+        console.log('InventoryDashboard: Using mock data...');
+        setLocations(MOCK_LOCATIONS);
+        setBatches(MOCK_BATCHES);
+        setAssets(MOCK_ASSETS);
+        setFees(MOCK_FEES);
+        setBranches([{ id: 'BR-01', name: 'Kya Sands', address: '123 Main St' }, { id: 'BR-02', name: 'Durban', address: '456 Beach Rd' }]);
         setIsLoading(false);
         return;
       }
@@ -73,17 +74,19 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext =
           const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
           setLocations(uniqueLocs);
         }
-        if (batchesRes.data) {
+        if (batchesRes.data && batchesRes.data.length > 0) {
           // Map view data back to Batch type or handle it specifically
           const mapped = batchesRes.data.map((b: any) => ({
             ...b,
             id: b.batch_id,
-            // Ensure we have the accrued_amount available
-            accrued_amount: b.accrued_amount
+            // Ensure we have the accrued_amount available as a number
+            accrued_amount: Number(b.accrued_amount || 0)
           }));
           // De-duplicate batches
           const uniqueBatches = Array.from(new Map(mapped.map((b: any) => [b.id, b])).values());
           setBatches(uniqueBatches);
+        } else if (!isSupabaseConfigured) {
+          setBatches(MOCK_BATCHES);
         }
         if (assetsRes.data) setAssets(assetsRes.data);
         if (feesRes.data) setFees(feesRes.data);

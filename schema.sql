@@ -417,7 +417,7 @@ BEGIN
     SELECT b.asset_id, a.ownership_type, a.billing_model, b.transaction_date, b.quantity, b.transfer_confirmed_by_customer, b.confirmation_date
     INTO v_asset_id, v_ownership, v_billing_model, v_created_at, v_quantity, v_confirmed, v_confirmed_at
     FROM public.batches b
-    JOIN public.asset_master a ON b.asset_id = a.id
+    LEFT JOIN public.asset_master a ON b.asset_id = a.id
     WHERE b.id = batch_id_input;
 
     IF v_ownership = 'Internal' OR COALESCE(v_asset_id, '') = '' THEN
@@ -431,9 +431,10 @@ BEGIN
             v_end_date DATE;
             v_rate NUMERIC;
         BEGIN
-            v_end_date := CASE WHEN v_confirmed THEN v_confirmed_at ELSE CURRENT_DATE END;
+            v_end_date := CASE WHEN v_confirmed THEN COALESCE(v_confirmed_at, CURRENT_DATE) ELSE CURRENT_DATE END;
             SELECT amount_zar INTO v_rate FROM public.fee_schedule WHERE asset_id = v_asset_id AND fee_type = 'Daily Rental (Supermarket)' AND effective_to IS NULL;
-            v_rental_total := GREATEST(0, (v_end_date - v_created_at)) * COALESCE(v_rate, 0) * v_quantity;
+            v_rental_total := (v_end_date - COALESCE(v_created_at, CURRENT_DATE) + 1) * COALESCE(v_rate, 0) * COALESCE(v_quantity, 0);
+            v_rental_total := GREATEST(0, v_rental_total);
         END;
     END IF;
 
@@ -1087,13 +1088,15 @@ SELECT
     b.current_location_id,
     s.name AS current_location,
     s.branch_id,
+    br.name AS branch_name,
     b.status AS batch_status,
     b.transaction_date,
     public.calculate_batch_accrual(b.id) AS daily_accrued_liability,
     (CURRENT_DATE - b.transaction_date) AS days_in_circulation
 FROM public.batches b
-JOIN public.asset_master a ON b.asset_id = a.id
-LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+LEFT JOIN public.asset_master a ON b.asset_id = a.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id
+LEFT JOIN public.branches br ON s.branch_id = br.id;
 
 CREATE OR REPLACE FUNCTION approve_reconciliation(p_stock_take_id UUID, p_approved_by UUID)
 RETURNS VOID AS $$
@@ -1134,7 +1137,7 @@ SELECT
     SUM(b.quantity) as unit_count,
     SUM(b.quantity * 450) as estimated_value_zar
 FROM public.batches b
-JOIN public.vw_all_sources s ON b.current_location_id = s.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id
 WHERE b.transfer_confirmed_by_customer = false
 GROUP BY s.id, s.name, s.branch_id;
 

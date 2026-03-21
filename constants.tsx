@@ -28,16 +28,16 @@ export const MOCK_ASSETS: AssetMaster[] = [
 ];
 
 export const MOCK_LOCATIONS: Location[] = [
-  { id: 'LOC-JHB-01', name: 'Lupo JHB Main Plant (Kya Sands)', type: LocationType.CRATES_DEPT, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
-  { id: 'LOC-CPT-01', name: 'Lupo CPT Distribution Hub', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
-  { id: 'LOC-DBN-01', name: 'Lupo KZN Depot', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL },
-  { id: 'LOC-CUST-01', name: 'Pick n Pay Hyper Woodmead', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
-  { id: 'LOC-CUST-02', name: 'Spar Kyalami', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
-  { id: 'LOC-CUST-03', name: 'Checkers Sandton', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER },
-  { id: 'LOC-TRANS-01', name: 'Truck GP 22 SH (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
-  { id: 'LOC-TRANS-02', name: 'Truck CA 99 LU (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
-  { id: 'LOC-SUP-01', name: 'SHUKU Asset Recovery Yard', type: LocationType.RETURNING, category: LocationCategory.EXTERNAL, partner_type: PartnerType.SUPPLIER },
-  { id: 'LOC-COLD-01', name: 'Lupo Frozen Vault A', type: LocationType.COLD_STORAGE, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL },
+  { id: 'LOC-JHB-01', name: 'Lupo JHB Main Plant (Kya Sands)', type: LocationType.CRATES_DEPT, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL, branch_id: 'BR-01' },
+  { id: 'LOC-CPT-01', name: 'Lupo CPT Distribution Hub', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL, branch_id: 'BR-01' },
+  { id: 'LOC-DBN-01', name: 'Lupo KZN Depot', type: LocationType.WAREHOUSE, category: LocationCategory.HOME, partner_type: PartnerType.INTERNAL, branch_id: 'BR-02' },
+  { id: 'LOC-CUST-01', name: 'Pick n Pay Hyper Woodmead', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER, branch_id: 'BR-01' },
+  { id: 'LOC-CUST-02', name: 'Spar Kyalami', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER, branch_id: 'BR-01' },
+  { id: 'LOC-CUST-03', name: 'Checkers Sandton', type: LocationType.AT_CUSTOMER, category: LocationCategory.EXTERNAL, partner_type: PartnerType.CUSTOMER, branch_id: 'BR-01' },
+  { id: 'LOC-TRANS-01', name: 'Truck GP 22 SH (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL, branch_id: 'BR-01' },
+  { id: 'LOC-TRANS-02', name: 'Truck CA 99 LU (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL, branch_id: 'BR-01' },
+  { id: 'LOC-SUP-01', name: 'SHUKU Asset Recovery Yard', type: LocationType.RETURNING, category: LocationCategory.EXTERNAL, partner_type: PartnerType.SUPPLIER, branch_id: 'BR-01' },
+  { id: 'LOC-COLD-01', name: 'Lupo Frozen Vault A', type: LocationType.COLD_STORAGE, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL, branch_id: 'BR-01' },
 ];
 
 export const MOCK_FEES: FeeSchedule[] = [
@@ -64,14 +64,18 @@ const generateMockData = () => {
     const branchId = location?.branch_id || (locId.includes('JHB') ? 'Kya Sands' : (locId.includes('DBN') ? 'Durban' : 'Kya Sands'));
     const date = new Date(Date.now() - Math.floor(Math.random() * 60) * 24 * 60 * 60 * 1000).toISOString();
     
+    const accruedAmount = Math.floor(Math.random() * 5000) + 500;
+    
     batches.push({
       id: batchId,
       asset_id: assetId,
       quantity: qty,
       current_location_id: locId,
       created_at: date,
+      transaction_date: date.split('T')[0],
       status: Math.random() > 0.1 ? 'Success' : 'Pending',
-      condition: MovementCondition.CLEAN
+      condition: MovementCondition.CLEAN,
+      accrued_amount: accruedAmount
     });
 
     movements.push({

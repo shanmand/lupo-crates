@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Truck, Package, AlertTriangle, TrendingUp, ShieldAlert, User as UserIcon, UserCheck, Loader2, Zap, Activity } from 'lucide-react';
 import { User as UserType, DashboardStats, BatchForensics } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { MOCK_BATCHES, MOCK_LOCATIONS } from '../constants';
 
 interface DashboardViewProps {
   currentUser: UserType;
@@ -20,6 +21,34 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!isSupabaseConfigured) {
+        // Mock data fallback
+        const mockStats: DashboardStats = {
+          available: 1250,
+          at_customers: 840,
+          in_transit: 320,
+          maintenance: 45,
+          total_fleet: 2455,
+          lost_missing: 12,
+          damaged: 8,
+          pending_charges: 15420.50,
+          open_loss_cases: 3,
+          accrued_rental: 42500.00,
+          settlement_liability: 125000.00,
+          active_customers: 15,
+          movements_today: 24
+        };
+        setStats(mockStats);
+        
+        const mockActivity: BatchForensics[] = MOCK_BATCHES.slice(0, 10).map(b => ({
+          date: b.transaction_date || new Date().toISOString(),
+          type: b.condition,
+          batch_id: b.id,
+          from_location: 'Main Warehouse',
+          to_location: MOCK_LOCATIONS.find(l => l.id === b.current_location_id)?.name || 'Unknown',
+          driver_name: 'John Doe',
+          quantity: b.quantity
+        }));
+        setRecentActivity(mockActivity);
         setIsLoading(false);
         return;
       }
