@@ -66,9 +66,12 @@ const generateMockData = () => {
     
     const accruedAmount = Math.floor(Math.random() * 5000) + 500;
     
+    const asset = MOCK_ASSETS.find(a => a.id === assetId);
+    
     batches.push({
       id: batchId,
       asset_id: assetId,
+      asset_name: asset?.name,
       quantity: qty,
       current_location_id: locId,
       created_at: date,

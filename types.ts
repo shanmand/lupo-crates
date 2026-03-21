@@ -229,6 +229,7 @@ export interface Batch {
   transfer_confirmed_by_customer?: boolean;
   confirmation_date?: string;
   accrued_amount?: number;
+  asset_name?: string;
 }
 
 export interface BatchMovement {

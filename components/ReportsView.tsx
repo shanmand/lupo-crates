@@ -81,7 +81,7 @@ const ReportsView: React.FC = () => {
       setIsLoading(true);
       try {
         const [bRes, lRes, aRes, brRes, tRes, tripsRes, stopsRes, driversRes, trucksRes] = await Promise.all([
-          supabase.from('batches').select('*'),
+          supabase.from('vw_global_inventory_tracker').select('*'),
           supabase.from('vw_all_sources').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('branches').select('*'),
@@ -95,9 +95,17 @@ const ReportsView: React.FC = () => {
           supabase.from('trucks').select('*')
         ]);
 
-        if (bRes.data) setBatches(bRes.data);
+        if (bRes.data) {
+          const mapped = bRes.data.map((b: any) => ({
+            ...b,
+            id: b.batch_id,
+            status: b.batch_status
+          }));
+          setBatches(mapped);
+        }
         if (lRes.data) setLocations(lRes.data);
         if (aRes.data) setAssets(aRes.data);
+        
         if (tRes.data) setTraces(tRes.data);
         if (tripsRes.data) setTrips(tripsRes.data);
         if (stopsRes.data) setTripStops(stopsRes.data);
@@ -122,12 +130,13 @@ const ReportsView: React.FC = () => {
     return batches.filter(batch => {
       const loc = locations.find(l => l.id === batch.current_location_id);
       const asset = assets.find(a => a.id === batch.asset_id);
+      const assetName = asset?.name || batch.asset_name || 'Unknown Asset';
       
       const matchesBranch = selectedBranch === 'all' || loc?.branch_id === selectedBranch;
       const matchesPartner = selectedPartnerType === 'all' || loc?.partner_type === selectedPartnerType;
       const matchesAsset = selectedAssetType === 'all' || batch.asset_id === selectedAssetType;
       const matchesSearch = batch.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           asset?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           assetName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            loc?.name.toLowerCase().includes(searchQuery.toLowerCase());
 
       // "Our Account" Logic: External Assets at External Locations are removed from our account
@@ -572,12 +581,13 @@ const ReportsView: React.FC = () => {
                   {filteredData.slice(0, 50).map(batch => {
                     const loc = locations.find(l => l.id === batch.current_location_id);
                     const asset = assets.find(a => a.id === batch.asset_id);
+                    const assetName = asset?.name || batch.asset_name || 'Unknown Asset';
                     return (
                       <tr key={batch.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 text-xs font-black text-slate-900">{batch.id}</td>
                         <td className="px-6 py-4">
-                          <p className="text-xs font-bold text-slate-700">{asset?.name}</p>
-                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{asset?.type}</p>
+                          <p className="text-xs font-bold text-slate-700">{assetName}</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{asset?.type || 'Asset'}</p>
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-xs font-bold text-slate-700">{loc?.name}</p>

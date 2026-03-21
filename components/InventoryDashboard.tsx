@@ -147,6 +147,13 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext =
   };
   const totalGlobalLiability = batches.reduce((acc, b) => acc + calculateAccruedCost(b.id), 0);
 
+  console.log('InventoryDashboard Counts:', {
+    totalLocations: locations.length,
+    filteredLocations: filteredLocations.length,
+    homeLocations: filteredLocations.filter(l => l.category === LocationCategory.HOME).length,
+    externalStorage: filteredLocations.filter(l => l.type === LocationType.COLD_STORAGE || l.category === LocationCategory.EXTERNAL).length
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -170,7 +177,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext =
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Home Locations</p>
             <p className="text-2xl font-bold text-slate-800">
-              {locations.filter(l => l.category === LocationCategory.HOME).length} Sites
+              {filteredLocations.filter(l => l.category === LocationCategory.HOME).length} Sites
             </p>
           </div>
           <Home className="text-emerald-500 opacity-20" size={40} />
@@ -179,7 +186,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext =
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">External Storage</p>
             <p className="text-2xl font-bold text-slate-800">
-              {locations.filter(l => l.type === LocationType.COLD_STORAGE).length} Sites
+              {filteredLocations.filter(l => l.type === LocationType.COLD_STORAGE || l.category === LocationCategory.EXTERNAL).length} Sites
             </p>
           </div>
           <ThermometerSnowflake className="text-blue-500 opacity-20" size={40} />
