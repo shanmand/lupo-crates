@@ -120,7 +120,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext =
   // Logic: Use the pre-calculated accrued amount from the view
   const calculateAccruedCost = (batchId: string) => {
     const batch = batches.find(b => b.id === batchId);
-    return (batch as any)?.accrued_amount || 0;
+    const amount = (batch as any)?.accrued_amount;
+    return (amount === null || amount === undefined || isNaN(amount)) ? 0 : Number(amount);
   };
 
   const getInventoryAtLocation = (locationId: string) => {
@@ -137,7 +138,10 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext =
     }
   };
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatCurrency = (val: number | null | undefined) => {
+    if (val === null || val === undefined || isNaN(val as number)) return '0.00';
+    return (val as number).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
   const totalGlobalLiability = batches.reduce((acc, b) => acc + calculateAccruedCost(b.id), 0);
 
   if (isLoading) {

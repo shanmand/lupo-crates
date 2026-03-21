@@ -59,7 +59,10 @@ const InventoryMap: React.FC = () => {
     return data.reduce((acc, item) => acc + (item?.daily_accrued_liability || 0), 0);
   }, [data]);
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatCurrency = (val: number | null | undefined) => {
+    if (val === null || val === undefined || isNaN(val as number)) return '0.00';
+    return (val as number).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   if (isLoading) {
     return (
