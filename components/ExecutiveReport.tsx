@@ -63,6 +63,8 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
 
       setIsLoading(true);
       try {
+        // In a real app, we would pass reportPeriod to the query or a RPC function
+        // For now, we re-fetch the current snapshot to show the UI is responsive
         const { data, error } = await supabase
           .from('vw_executive_report')
           .select('*')
@@ -83,15 +85,18 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
     };
 
     fetchData();
-  }, []);
+  }, [reportPeriod]);
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const handleGenerateForecast = () => {
     setIsGeneratingForecast(true);
+    // Simulate generation process
     setTimeout(() => {
       setIsGeneratingForecast(false);
-      alert("Quarterly Forecast Generated Successfully! A PDF report has been prepared for download.");
+      // Instead of alert, we can show a temporary success state or just log it
+      // For this environment, we'll use a console log and a visual change
+      console.log("Quarterly Forecast Generated Successfully!");
     }, 2000);
   };
 
@@ -247,10 +252,10 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
            <button 
              onClick={handleGenerateForecast}
              disabled={isGeneratingForecast}
-             className="px-6 py-3 bg-white text-emerald-900 font-bold rounded-xl text-xs hover:bg-emerald-50 transition-colors whitespace-nowrap flex items-center gap-2 disabled:opacity-50"
+             className={`px-6 py-3 font-bold rounded-xl text-xs transition-all whitespace-nowrap flex items-center gap-2 disabled:opacity-50 ${isGeneratingForecast ? 'bg-emerald-800 text-white' : 'bg-white text-emerald-900 hover:bg-emerald-50'}`}
            >
               {isGeneratingForecast ? <Loader2 className="animate-spin" size={14} /> : null}
-              {isGeneratingForecast ? 'Processing...' : 'Generate Quarterly Forecast'}
+              {isGeneratingForecast ? 'Processing Forecast...' : 'Generate Quarterly Forecast'}
            </button>
         </div>
       )}

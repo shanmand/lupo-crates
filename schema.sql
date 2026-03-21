@@ -279,13 +279,14 @@ CREATE TABLE public.claims (
 );
 
 CREATE TABLE public.business_parties (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY DEFAULT uuid_generate_v4()::text,
     name TEXT NOT NULL,
     party_type TEXT NOT NULL, -- Customer, Supplier
     contact_person TEXT,
     email TEXT,
     phone TEXT,
     address TEXT,
+    branch_id TEXT REFERENCES public.branches(id), -- Associate with a branch
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -967,14 +968,14 @@ CREATE OR REPLACE VIEW public.vw_movement_destinations AS
 SELECT * FROM public.vw_all_sources
 ORDER BY sort_group, name;
 
-INSERT INTO public.business_parties (name, party_type) VALUES 
-('CHEP South Africa', 'Supplier'),
-('Pick n Pay Distribution', 'Customer')
-ON CONFLICT DO NOTHING;
+INSERT INTO public.business_parties (id, name, party_type, branch_id) VALUES 
+('BP-001', 'CHEP South Africa', 'Supplier', 'BR-01'),
+('BP-002', 'Pick n Pay Distribution', 'Customer', 'BR-01')
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.collection_requests (customer_id, asset_id, estimated_quantity, preferred_pickup_date, contact_person, contact_number) VALUES 
 ('LOC-CUST-01', 'SH-001', 150, CURRENT_DATE + INTERVAL '1 day', 'John Doe', '011-555-0123'),
-('Pick n Pay Distribution', 'SH-001', 300, CURRENT_DATE + INTERVAL '2 days', 'Jane Smith', '011-555-0456')
+('BP-002', 'SH-001', 300, CURRENT_DATE + INTERVAL '2 days', 'Jane Smith', '011-555-0456')
 ON CONFLICT DO NOTHING;
 
 -- 18. Management Reporting Views
@@ -1000,7 +1001,7 @@ SELECT
     id::text,
     name,
     party_type as partner_type,
-    NULL as branch_id,
+    branch_id,
     'Business Party' as type,
     'External' as category,
     address,
@@ -1225,12 +1226,13 @@ LEFT JOIN LATERAL (
 ) ds ON true;
 
 -- Executive Report View
+DROP VIEW IF EXISTS public.vw_executive_report CASCADE;
 CREATE OR REPLACE VIEW public.vw_executive_report AS
 WITH branch_metrics AS (
     SELECT 
         b.id as branch_id,
         b.name as branch_name,
-        -- Total units currently managed by this branch
+        -- Total units currently managed by this branch (via vw_all_sources)
         COALESCE(SUM(bt.quantity), 0) as total_units,
         -- Stagnant units (> 14 days)
         COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 14 AND bt.transfer_confirmed_by_customer = false THEN bt.quantity ELSE 0 END), 0) as stagnant_units,
@@ -1240,30 +1242,30 @@ WITH branch_metrics AS (
         (
             SELECT COALESCE(SUM(al.lost_quantity), 0)
             FROM public.asset_losses al
-            JOIN public.locations l ON al.last_known_location_id = l.id
-            WHERE l.branch_id = b.id
+            JOIN public.vw_all_sources s ON al.last_known_location_id = s.id
+            WHERE s.branch_id = b.id
         ) as lost_units
     FROM public.branches b
-    LEFT JOIN public.locations loc ON b.id = loc.branch_id
-    LEFT JOIN public.batches bt ON loc.id = bt.current_location_id
+    LEFT JOIN public.vw_all_sources s ON b.id = s.branch_id
+    LEFT JOIN public.batches bt ON s.id = bt.current_location_id
     GROUP BY b.id, b.name
 ),
 forensics AS (
     -- Get the oldest stagnant batch for each branch
-    SELECT DISTINCT ON (l.branch_id)
-        l.branch_id,
+    SELECT DISTINCT ON (s.branch_id)
+        s.branch_id,
         bm.driver_id,
         d.full_name as driver_name,
-        l.name as last_location,
+        s.name as last_location,
         bt.id as batch_id,
         bt.transaction_date
     FROM public.batches bt
-    JOIN public.locations l ON bt.current_location_id = l.id
+    JOIN public.vw_all_sources s ON bt.current_location_id = s.id
     LEFT JOIN public.batch_movements bm ON bt.id = bm.batch_id
     LEFT JOIN public.drivers d ON bm.driver_id = d.id
     WHERE (CURRENT_DATE - bt.transaction_date) > 14 
       AND bt.transfer_confirmed_by_customer = false
-    ORDER BY l.branch_id, bt.transaction_date ASC, bm.timestamp DESC
+    ORDER BY s.branch_id, bt.transaction_date ASC, bm.timestamp DESC
 )
 SELECT 
     m.branch_id,
