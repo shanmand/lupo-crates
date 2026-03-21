@@ -23,7 +23,7 @@ const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: 
     try {
       console.log('Fetching Forensic Data with filters:', { selectedBranchId, startDate, endDate, page, searchQuery });
       let query = supabase
-        .from('vw_batch_forensics')
+        .from('vw_master_logistics_trace')
         .select('*', { count: 'exact' });
 
       if (searchQuery) {
@@ -31,7 +31,7 @@ const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: 
       }
 
       if (selectedBranchId && selectedBranchId !== 'Consolidated') {
-        query = query.eq('branch_id', selectedBranchId);
+        query = query.eq('custodian_branch_id', selectedBranchId);
       }
 
       if (startDate) {

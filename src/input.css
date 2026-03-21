@@ -23,6 +23,9 @@
     width: 100% !important;
     border-collapse: collapse !important;
   }
+  thead {
+    display: table-header-group !important;
+  }
   th, td {
     border: 1px solid #e2e8f0 !important;
     padding: 8px !important;

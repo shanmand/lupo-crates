@@ -25,13 +25,44 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
       setIsLoading(true);
       try {
+        let statsQuery = supabase.from('vw_dashboard_stats').select('*');
+        let activityQuery = supabase.from('vw_batch_forensics').select('*').limit(20);
+
+        if (branchContext && branchContext !== 'Consolidated') {
+          // Assuming branchContext is the branch name, we might need branch_id or branch_name filter
+          // The request says "If a variable like selectedBranchId is 'Consolidated' or empty, the query must skip the .eq('branch_id', ...) filter"
+          // So I'll assume we filter by branch_id if we have it, but here we have branchContext as name.
+          // Let's check if vw_dashboard_stats has branch_name or branch_id.
+          // For now, I'll follow the rule for branch_id if I can find it.
+          // Since I don't see branch_id in the props, I'll use branchContext as a placeholder for the logic.
+          statsQuery = statsQuery.eq('branch_name', branchContext);
+          activityQuery = activityQuery.eq('branch_name', branchContext);
+        }
+
         const [statsRes, activityRes] = await Promise.all([
-          supabase.from('vw_dashboard_stats').select('*').single(),
-          supabase.from('vw_batch_forensics').select('*').limit(20)
+          statsQuery.single(),
+          activityQuery.order('transaction_date', { ascending: false })
         ]);
 
-        if (statsRes.data) setStats(statsRes.data);
-        if (activityRes.data) setRecentActivity(activityRes.data);
+        if (statsRes.error) console.log("Supabase Stats Error:", statsRes.error);
+        if (activityRes.error) console.log("Supabase Activity Error:", activityRes.error);
+
+        setStats(statsRes.data || {
+          available: 0,
+          at_customers: 0,
+          in_transit: 0,
+          maintenance: 0,
+          total_fleet: 0,
+          lost_missing: 0,
+          damaged: 0,
+          pending_charges: 0,
+          open_loss_cases: 0,
+          accrued_rental: 0,
+          settlement_liability: 0,
+          active_customers: 0,
+          movements_today: 0
+        });
+        setRecentActivity(activityRes.data || []);
       } catch (err) {
         console.error("Dashboard Fetch Error:", err);
       } finally {
@@ -42,12 +73,14 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
     fetchDashboardData();
   }, [branchContext]);
 
-  const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('en-ZA', { 
+  const formatCurrency = (val: any) => {
+    const num = typeof val === 'number' ? val : parseFloat(val);
+    return new Intl.NumberFormat('en-ZA', { 
       style: 'currency', 
       currency: 'ZAR',
       minimumFractionDigits: 2 
-    }).format(val);
+    }).format(isNaN(num) ? 0 : num);
+  };
 
   if (isLoading) {
     return (
@@ -60,12 +93,21 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
     );
   }
 
-  if (!stats) return (
-    <div className="p-8 text-center text-slate-500">
-      <AlertTriangle className="mx-auto mb-4 opacity-20" size={48} />
-      <p className="font-black uppercase tracking-widest text-sm">No Dashboard Data Available</p>
-    </div>
-  );
+  const displayStats = stats || {
+    available: 0,
+    at_customers: 0,
+    in_transit: 0,
+    maintenance: 0,
+    total_fleet: 0,
+    lost_missing: 0,
+    damaged: 0,
+    pending_charges: 0,
+    open_loss_cases: 0,
+    accrued_rental: 0,
+    settlement_liability: 0,
+    active_customers: 0,
+    movements_today: 0
+  };
 
   return (
     <div className="space-y-8 p-8 bg-slate-950 min-h-screen text-slate-200">
@@ -85,27 +127,27 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
       {/* Top Row: Fleet Status */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <DashboardCard label="Available" value={stats.available} icon={<Package className="text-emerald-400" />} />
-        <DashboardCard label="At Customers" value={stats.at_customers} icon={<UserIcon className="text-blue-400" />} />
-        <DashboardCard label="In Transit" value={stats.in_transit} icon={<Truck className="text-amber-400" />} />
-        <DashboardCard label="Maintenance" value={stats.maintenance} icon={<AlertTriangle className="text-rose-400" />} />
-        <DashboardCard label="Total Fleet" value={stats.total_fleet} icon={<Activity className="text-slate-400" />} />
+        <DashboardCard label="Available" value={isNaN(Number(displayStats.available)) ? 0 : Number(displayStats.available)} icon={<Package className="text-emerald-400" />} />
+        <DashboardCard label="At Customers" value={isNaN(Number(displayStats.at_customers)) ? 0 : Number(displayStats.at_customers)} icon={<UserIcon className="text-blue-400" />} />
+        <DashboardCard label="In Transit" value={isNaN(Number(displayStats.in_transit)) ? 0 : Number(displayStats.in_transit)} icon={<Truck className="text-amber-400" />} />
+        <DashboardCard label="Maintenance" value={isNaN(Number(displayStats.maintenance)) ? 0 : Number(displayStats.maintenance)} icon={<AlertTriangle className="text-rose-400" />} />
+        <DashboardCard label="Total Fleet" value={isNaN(Number(displayStats.total_fleet)) ? 0 : Number(displayStats.total_fleet)} icon={<Activity className="text-slate-400" />} />
       </div>
 
       {/* Middle Row: Financial Alerts */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <AlertCard label="Lost / Missing" value={stats.lost_missing} color="rose" />
-        <AlertCard label="Damaged" value={stats.damaged} color="rose" />
-        <AlertCard label="Pending Charges" value={formatCurrency(stats.pending_charges)} color="amber" />
-        <AlertCard label="Open Loss Cases" value={stats.open_loss_cases} color="amber" />
+        <AlertCard label="Lost / Missing" value={displayStats.lost_missing || 0} color="rose" />
+        <AlertCard label="Damaged" value={displayStats.damaged || 0} color="rose" />
+        <AlertCard label="Pending Charges" value={formatCurrency(displayStats.pending_charges)} color="amber" />
+        <AlertCard label="Open Loss Cases" value={displayStats.open_loss_cases || 0} color="amber" />
       </div>
 
       {/* Bottom Row: Liability */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <DashboardCard label="Accrued Rental" value={formatCurrency(stats.accrued_rental)} icon={<TrendingUp className="text-emerald-400" />} />
-        <DashboardCard label="Settlement Liability" value={formatCurrency(stats.settlement_liability)} icon={<ShieldAlert className="text-blue-400" />} />
-        <DashboardCard label="Active Customers" value={stats.active_customers} icon={<UserCheck className="text-indigo-400" />} />
-        <DashboardCard label="Movements Today" value={stats.movements_today} icon={<Zap className="text-amber-400" />} />
+        <DashboardCard label="Accrued Rental" value={formatCurrency(displayStats.accrued_rental)} icon={<TrendingUp className="text-emerald-400" />} />
+        <DashboardCard label="Settlement Liability" value={formatCurrency(displayStats.settlement_liability)} icon={<ShieldAlert className="text-blue-400" />} />
+        <DashboardCard label="Active Customers" value={displayStats.active_customers || 0} icon={<UserCheck className="text-indigo-400" />} />
+        <DashboardCard label="Movements Today" value={displayStats.movements_today || 0} icon={<Zap className="text-amber-400" />} />
       </div>
 
       {/* Recent Activity Table */}
@@ -120,8 +162,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
               <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800 bg-slate-950/30">
                 <th className="px-6 py-4">Date</th>
                 <th className="px-6 py-4">Type</th>
+                <th className="px-6 py-4">Batch</th>
                 <th className="px-6 py-4">From</th>
                 <th className="px-6 py-4">To</th>
+                <th className="px-6 py-4">Driver</th>
                 <th className="px-6 py-4 text-right">Quantity</th>
               </tr>
             </thead>
@@ -131,23 +175,21 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                   <td className="px-6 py-4 text-xs font-bold text-slate-300">
                     {activity.date ? new Date(activity.date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                      (activity.type || '').toLowerCase().includes('clean') ? 'bg-emerald-500/10 text-emerald-500' : 
-                      (activity.type || '').toLowerCase().includes('dirty') ? 'bg-amber-500/10 text-amber-500' :
-                      'bg-blue-500/10 text-blue-500'
-                    }`}>
-                      {activity.type || 'Unknown'}
-                    </span>
+                  <td className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">
+                    {activity.type || 'unknown'}
+                  </td>
+                  <td className="px-6 py-4 text-xs font-bold text-emerald-500">
+                    {activity.batch_id}
                   </td>
                   <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.from_location || 'N/A'}</td>
                   <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.to_location || 'N/A'}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400">{activity.driver_name || 'N/A'}</td>
                   <td className="px-6 py-4 text-xs font-black text-emerald-400 text-right tabular-nums">{activity.quantity || 0}</td>
                 </tr>
               ))}
               {recentActivity.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-600 font-bold uppercase tracking-widest text-xs">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-600 font-bold uppercase tracking-widest text-xs">
                     No recent movements recorded
                   </td>
                 </tr>

@@ -204,6 +204,7 @@ CREATE TABLE public.trips (
     scheduled_departure_time TEXT,
     start_odometer INTEGER,
     end_odometer INTEGER,
+    start_location_id TEXT,
     start_time TIMESTAMPTZ,
     end_time TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -1044,13 +1045,16 @@ SELECT * FROM stats;
 CREATE OR REPLACE VIEW public.vw_batch_forensics AS
 SELECT 
     bm.transaction_date as date,
-    bm.condition as type,
+    COALESCE(bm.condition, 'unknown') as type,
+    bm.batch_id,
     s_from.name as from_location,
     s_to.name as to_location,
+    d.full_name as driver_name,
     bm.quantity
 FROM public.batch_movements bm
 LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
 LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.drivers d ON bm.driver_id = d.id
 ORDER BY bm.timestamp DESC
 LIMIT 20;
 

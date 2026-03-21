@@ -70,7 +70,8 @@ const generateMockData = () => {
       quantity: qty,
       current_location_id: locId,
       created_at: date,
-      status: Math.random() > 0.1 ? 'Success' : 'Pending'
+      status: Math.random() > 0.1 ? 'Success' : 'Pending',
+      condition: MovementCondition.CLEAN
     });
 
     movements.push({
@@ -78,6 +79,8 @@ const generateMockData = () => {
       batch_id: batchId,
       from_location_id: 'LOC-JHB-01',
       to_location_id: locId,
+      quantity: qty,
+      transaction_date: date.split('T')[0],
       timestamp: date,
       condition: Math.random() > 0.05 ? MovementCondition.CLEAN : MovementCondition.DIRTY,
       origin_user_id: 'U-003',

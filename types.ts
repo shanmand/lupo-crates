@@ -220,13 +220,15 @@ export interface Batch {
   asset_id: string;
   quantity: number;
   current_location_id: string;
-  created_at: string;
   status: 'Pending' | 'Success' | 'Lost' | 'In-Transit' | 'Settled';
+  condition: MovementCondition;
+  created_at?: string;
   is_settled?: boolean;
   settled_at?: string;
   transaction_date?: string;
   transfer_confirmed_by_customer?: boolean;
   confirmation_date?: string;
+  accrued_amount?: number;
 }
 
 export interface BatchMovement {
@@ -234,12 +236,14 @@ export interface BatchMovement {
   batch_id: string;
   from_location_id: string;
   to_location_id: string;
+  transaction_date: string;
+  route_instructions?: string;
+  quantity?: number;
   truck_id?: string;
   driver_id?: string;
-  timestamp: string;
-  condition: MovementCondition;
-  origin_user_id: string;
-  transaction_date?: string;
+  timestamp?: string;
+  condition?: MovementCondition;
+  origin_user_id?: string;
 }
 
 export interface LogisticsTrace {
@@ -247,12 +251,12 @@ export interface LogisticsTrace {
   batch_id: string;
   transaction_date: string;
   timestamp: string;
-  driver_name: string;
+  driver_name: string | null;
   quantity: number;
   to_location_name: string;
   to_location_id: string;
   from_location_name: string;
-  truck_plate: string;
+  truck_plate: string | null;
   condition: MovementCondition;
   custodian_branch_id: string;
 }
@@ -274,18 +278,19 @@ export interface ThaanSlip {
   doc_url: string;
   is_signed: boolean;
   signed_at: string | null;
+  created_at?: string;
 }
 
 export interface CollectionRequest {
   id: string;
   customer_id: string;
-  customer_name?: string;
+  customer_name?: string; // From view
   asset_id: string;
-  asset_name?: string;
+  asset_name?: string; // From view
   estimated_quantity: number;
   preferred_pickup_date: string;
-  contact_person?: string;
-  contact_number?: string;
+  contact_person: string;
+  contact_number: string;
   status: 'Pending' | 'Assigned' | 'Completed' | 'Cancelled';
   created_at: string;
 }
@@ -339,13 +344,16 @@ export interface InventoryRecord {
 
 export interface AuditLog {
   id: string;
-  entity_id: string;
-  entity_type: 'Batch' | 'Fee' | 'Claim' | 'Verification';
-  action: string;
-  old_value: string;
-  new_value: string;
   user_id: string;
-  timestamp: string;
+  action: string;
+  table_name?: string;
+  record_id?: string;
+  entity_id?: string;
+  entity_type?: string;
+  old_value?: any;
+  new_value?: any;
+  timestamp?: string;
+  created_at?: string;
 }
 
 export interface DashboardStats {
@@ -367,8 +375,10 @@ export interface DashboardStats {
 export interface BatchForensics {
   date: string;
   type: string;
+  batch_id: string;
   from_location: string;
   to_location: string;
+  driver_name: string;
   quantity: number;
 }
 
@@ -473,4 +483,229 @@ export interface TripStop {
   status: 'Pending' | 'Arrived' | 'Departed' | 'Skipped';
   notes?: string;
   created_at?: string;
+}
+
+export interface BranchBudget {
+  id: string;
+  branch_id: string;
+  asset_type: string;
+  month: string;
+  budget_revenue_zar: number;
+  budget_maintenance_zar: number;
+  created_at?: string;
+}
+
+export interface DriverShift {
+  id: string;
+  driver_id: string;
+  truck_id: string;
+  start_time: string;
+  end_time: string | null;
+  branch_id: string;
+  created_at: string;
+  manual_end_time?: string;
+  notes?: string;
+}
+
+export interface InventoryReconciliation {
+  id: string;
+  batch_id: string;
+  stock_take_date: string;
+  counter_name: string;
+  expected_quantity: number;
+  actual_count: number;
+  variance: number;
+  comments?: string;
+  status: string;
+  approved_by?: string;
+  approved_at?: string;
+  recorded_at: string;
+}
+
+export interface LogisticsUnit {
+  id: string;
+  truck_plate: string;
+  driver_name: string;
+  created_at: string;
+}
+
+// View Interfaces
+export interface AllOrigin {
+  id: string;
+  name: string;
+  type: string;
+  display_name: string;
+}
+
+export interface AssignablePersonnel {
+  id: string;
+  name: string;
+  role: string;
+  type: 'User' | 'Driver';
+  branch_id: string;
+  is_active: boolean;
+}
+
+export interface BusinessDirectoryEntry {
+  id: string;
+  name: string;
+  party_type: string;
+  address: string;
+  asset_types: number;
+  current_stock: number;
+}
+
+export interface ExecutiveReportRow {
+  branch_id: string;
+  branch_name: string;
+  total_units: number;
+  stagnant_units: number;
+  financial_drainage: number;
+  lost_units: number;
+  loss_ratio: number;
+  oldest_stagnant_driver: string;
+  oldest_stagnant_location: string;
+  oldest_stagnant_batch_id: string;
+}
+
+export interface FleetComplianceAlert {
+  truck_id: string;
+  plate_number: string;
+  license_expiry: string;
+  driver_id: string;
+  driver_name: string;
+  driver_license_expiry: string;
+  prdp_expiry: string;
+  truck_status: string;
+  driver_status: string;
+}
+
+export interface FleetReadiness {
+  truck_id: string;
+  plate_number: string;
+  branch_id: string;
+  branch_name: string;
+  license_disc_expiry: string;
+  license_status: 'Expired' | 'Critical' | 'Warning' | 'Compliant';
+  last_renewal_cost: number;
+  ytd_roadworthy_costs: number;
+  last_roadworthy_result: string | null;
+  roadworthy_expiry: string | null;
+}
+
+export interface IntakeSummaryReportRow {
+  source_type: string;
+  source_name: string;
+  total_batches: number;
+  total_quantity: number;
+  week_starting: string;
+}
+
+export interface ManagementKPIs {
+  crate_cycle_time: number;
+  shrinkage_rate: number;
+  monthly_compliance_cost: number;
+}
+
+export interface PendingCollection {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  asset_id: string;
+  asset_name: string;
+  estimated_quantity: number;
+  preferred_pickup_date: string;
+  contact_person: string;
+  contact_number: string;
+  status: string;
+  created_at: string;
+}
+
+export interface GlobalInventoryTracker {
+  batch_id: string;
+  asset_id: string;
+  asset_name: string;
+  quantity: number;
+  current_location_id: string;
+  current_location: string;
+  branch_id: string;
+  batch_status: string;
+  transaction_date: string;
+  daily_accrued_liability: number;
+  days_in_circulation: number;
+}
+
+export interface InventorySource {
+  id: string;
+  name: string;
+  partner_type: string;
+  branch_id: string | null;
+  type: string;
+  category: string;
+  address: string;
+  display_name: string;
+  sort_group: number;
+}
+
+export interface BatchAccrual {
+  batch_id: string;
+  asset_id: string;
+  quantity: number;
+  current_location_id: string;
+  current_location: string;
+  branch_id: string;
+  transaction_date: string;
+  transfer_confirmed_by_customer: boolean;
+  accrued_amount: number;
+}
+
+export interface DailyBurnRate {
+  branch_name: string;
+  location_name: string;
+  location_id: string;
+  branch_id: string;
+  daily_burn_rate: number;
+  batch_count: number;
+  avg_duration_days: number;
+}
+
+export interface BranchFleetExpense {
+  branch_id: string;
+  branch_name: string;
+  truck_id: string;
+  plate_number: string;
+  expense_type: string;
+  amount: number;
+  expense_date: string;
+  license_doc_url: string;
+}
+
+export interface LocationUnconfirmedValue {
+  location_id: string;
+  location_name: string;
+  branch_id: string;
+  unit_count: number;
+  estimated_value_zar: number;
+}
+
+export interface TripAuditTrail {
+  movement_id: string;
+  movement_time: string;
+  transaction_date: string;
+  batch_id: string;
+  quantity: number;
+  condition: string;
+  route_instructions: string;
+  from_location: string;
+  to_location: string;
+  driver_name: string;
+  driver_id: string;
+  truck_plate: string;
+  truck_id: string;
+  branch_id: string;
+  shift_id: string;
+  shift_start: string;
+  shift_end: string;
+  manual_end_time: string;
+  shift_notes: string;
 }

@@ -19,7 +19,8 @@ import {
   History as HistoryIcon
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { Batch, Location, AssetMaster, Branch, PartnerType, LocationType, LogisticsTrace } from '../types';
+import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_MOVEMENTS, MOCK_TRUCKS, MOCK_DRIVERS } from '../constants';
+import { Batch, Location, AssetMaster, Branch, PartnerType, LocationType, LogisticsTrace, Trip, TripStop, Driver, Truck as TruckType } from '../types';
 
 const ReportsView: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -27,25 +28,59 @@ const ReportsView: React.FC = () => {
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [traces, setTraces] = useState<LogisticsTrace[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [tripStops, setTripStops] = useState<TripStop[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'inventory' | 'trace'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'trace' | 'trips'>('inventory');
 
   // Filters
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedPartnerType, setSelectedPartnerType] = useState<string>('all');
   const [selectedAssetType, setSelectedAssetType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [tripReportLevel, setTripReportLevel] = useState<'driver' | 'location'>('driver');
 
   useEffect(() => {
     const fetchData = async () => {
       if (!isSupabaseConfigured) {
+        setBatches(MOCK_BATCHES);
+        setLocations(MOCK_LOCATIONS);
+        setAssets(MOCK_ASSETS);
+        setTraces(MOCK_MOVEMENTS.map(m => ({
+          id: m.id,
+          batch_id: m.batch_id,
+          from_location: MOCK_LOCATIONS.find(l => l.id === m.from_location_id)?.name || 'Unknown',
+          to_location: MOCK_LOCATIONS.find(l => l.id === m.to_location_id)?.name || 'Unknown',
+          quantity: m.quantity,
+          transaction_date: m.transaction_date,
+          condition: m.condition,
+          driver_name: MOCK_DRIVERS.find(d => d.id === m.driver_id)?.full_name || 'Unknown',
+          truck_plate: MOCK_TRUCKS.find(t => t.id === m.truck_id)?.plate_number || 'Unknown'
+        })));
+        setTrips([
+          {
+            id: 'TRIP-001',
+            route_name: 'JHB-DBN Express',
+            driver_id: 'DRV-001',
+            truck_id: 'TRK-001',
+            scheduled_date: new Date().toISOString().split('T')[0],
+            status: 'In Progress',
+            created_at: new Date().toISOString()
+          }
+        ]);
+        setDrivers(MOCK_DRIVERS);
+        setTrucks(MOCK_TRUCKS);
         setIsLoading(false);
         return;
       }
       setIsLoading(true);
       try {
-        const [bRes, lRes, aRes, brRes, tRes] = await Promise.all([
+        const [bRes, lRes, aRes, brRes, tRes, tripsRes, stopsRes, driversRes, trucksRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('vw_all_sources').select('*'),
           supabase.from('asset_master').select('*'),
@@ -53,13 +88,21 @@ const ReportsView: React.FC = () => {
           supabase.from('vw_master_logistics_trace')
             .select('*')
             .order('timestamp', { ascending: false })
-            .limit(1000)
+            .limit(1000),
+          supabase.from('trips').select('*').order('scheduled_date', { ascending: false }),
+          supabase.from('trip_stops').select('*'),
+          supabase.from('drivers').select('*'),
+          supabase.from('trucks').select('*')
         ]);
 
         if (bRes.data) setBatches(bRes.data);
         if (lRes.data) setLocations(lRes.data);
         if (aRes.data) setAssets(aRes.data);
         if (tRes.data) setTraces(tRes.data);
+        if (tripsRes.data) setTrips(tripsRes.data);
+        if (stopsRes.data) setTripStops(stopsRes.data);
+        if (driversRes.data) setDrivers(driversRes.data);
+        if (trucksRes.data) setTrucks(trucksRes.data);
         
         if (brRes.data) {
           setBranches(brRes.data);
@@ -94,15 +137,23 @@ const ReportsView: React.FC = () => {
     });
   }, [batches, locations, assets, selectedBranch, selectedPartnerType, selectedAssetType, searchQuery]);
 
-  const stats = useMemo(() => {
+  const stats = useMemo<{
+    totalUnits: number;
+    byLocation: Record<string, number>;
+    byAsset: Record<string, number>;
+    conditionSummary: Record<string, { clean: number, dirty: number, damaged: number }>;
+    filteredTrips: Trip[];
+    tripsByDriver: Record<string, Trip[]>;
+    tripsByLocation: Record<string, (Trip & { stopStatus: string })[]>;
+  }>(() => {
     const totalUnits = filteredData.reduce((acc, b) => acc + b.quantity, 0);
-    const byLocation = filteredData.reduce((acc: Record<string, number>, b) => {
+    const byLocation = filteredData.reduce<Record<string, number>>((acc, b) => {
       const loc = locations.find(l => l.id === b.current_location_id)?.name || 'Unknown';
       acc[loc] = (acc[loc] || 0) + b.quantity;
       return acc;
     }, {});
 
-    const byAsset = filteredData.reduce((acc: Record<string, number>, b) => {
+    const byAsset = filteredData.reduce<Record<string, number>>((acc, b) => {
       const asset = assets.find(a => a.id === b.asset_id)?.name || 'Unknown';
       acc[asset] = (acc[asset] || 0) + b.quantity;
       return acc;
@@ -138,8 +189,34 @@ const ReportsView: React.FC = () => {
       else if (t.condition === 'Damaged') conditionSummary[t.to_location_name].damaged += t.quantity;
     }
 
-    return { totalUnits, byLocation, byAsset, conditionSummary };
-  }, [filteredData, locations, assets, traces, selectedBranch]);
+    // Trip Stats
+    const filteredTrips = trips.filter(trip => {
+      const tripDate = trip.scheduled_date || '';
+      const inRange = tripDate >= startDate && tripDate <= endDate;
+      const matchesDriver = searchQuery === '' || drivers.find(d => d.id === trip.driver_id)?.full_name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTruck = searchQuery === '' || trucks.find(t => t.id === trip.truck_id)?.plate_number.toLowerCase().includes(searchQuery.toLowerCase());
+      return inRange && (matchesDriver || matchesTruck);
+    });
+
+    const tripsByDriver = filteredTrips.reduce<Record<string, Trip[]>>((acc, trip) => {
+      const driverName = drivers.find(d => d.id === trip.driver_id)?.full_name || 'Unknown Driver';
+      if (!acc[driverName]) acc[driverName] = [];
+      acc[driverName].push(trip);
+      return acc;
+    }, {});
+
+    const tripsByLocation = tripStops.reduce<Record<string, (Trip & { stopStatus: string })[]>>((acc, stop) => {
+      const trip = filteredTrips.find(t => t.id === stop.trip_id);
+      if (trip) {
+        const locName = locations.find(l => l.id === stop.location_id)?.name || 'Unknown Location';
+        if (!acc[locName]) acc[locName] = [];
+        acc[locName].push({ ...trip, stopStatus: stop.status });
+      }
+      return acc;
+    }, {});
+
+    return { totalUnits, byLocation, byAsset, conditionSummary, filteredTrips, tripsByDriver, tripsByLocation };
+  }, [filteredData, locations, assets, traces, selectedBranch, trips, tripStops, startDate, endDate, searchQuery, drivers, trucks]);
 
   const handleExportCSV = () => {
     const headers = ['Batch ID', 'Asset', 'Asset Type', 'Location', 'Partner Type', 'Quantity'];
@@ -171,7 +248,122 @@ const ReportsView: React.FC = () => {
   };
 
   const handleGeneratePDF = () => {
-    window.print();
+    if (activeTab === 'trips') {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const title = `Trip Audit Report (${startDate} to ${endDate})`;
+      const levelTitle = tripReportLevel === 'driver' ? 'Driver Level' : 'Location Level';
+
+      let contentHtml = '';
+
+      if (tripReportLevel === 'driver') {
+        Object.keys(stats.tripsByDriver).forEach((driverName) => {
+          const driverTrips = stats.tripsByDriver[driverName];
+          contentHtml += `
+            <div class="report-section">
+              <h2 class="section-title">Driver: ${driverName}</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Trip ID</th>
+                    <th>Date</th>
+                    <th>Truck</th>
+                    <th>Route</th>
+                    <th>Status</th>
+                    <th>Stops</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${driverTrips.map(trip => {
+                    const truck = trucks.find(t => t.id === trip.truck_id)?.plate_number || 'N/A';
+                    const stopsCount = tripStops.filter(s => s.trip_id === trip.id).length;
+                    return `
+                      <tr>
+                        <td>${trip.id}</td>
+                        <td>${trip.scheduled_date}</td>
+                        <td>${truck}</td>
+                        <td>${trip.route_name || 'N/A'}</td>
+                        <td>${trip.status}</td>
+                        <td>${stopsCount}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        });
+      } else {
+        Object.keys(stats.tripsByLocation).forEach((locName) => {
+          const locTrips = stats.tripsByLocation[locName];
+          contentHtml += `
+            <div class="report-section">
+              <h2 class="section-title">Location: ${locName}</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Trip ID</th>
+                    <th>Date</th>
+                    <th>Driver</th>
+                    <th>Truck</th>
+                    <th>Stop Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${locTrips.map(trip => {
+                    const driver = drivers.find(d => d.id === trip.driver_id)?.full_name || 'N/A';
+                    const truck = trucks.find(t => t.id === trip.truck_id)?.plate_number || 'N/A';
+                    return `
+                      <tr>
+                        <td>${trip.id}</td>
+                        <td>${trip.scheduled_date}</td>
+                        <td>${driver}</td>
+                        <td>${truck}</td>
+                        <td>${trip.stopStatus}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        });
+      }
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>${title}</title>
+            <style>
+              body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; }
+              .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; }
+              .header h1 { margin: 0; font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+              .header p { margin: 5px 0 0; color: #64748b; font-size: 12px; font-weight: 600; }
+              .report-section { margin-bottom: 40px; page-break-inside: avoid; }
+              .section-title { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #0f172a; margin-bottom: 15px; border-left: 4px solid #0f172a; padding-left: 10px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+              th { background: #f8fafc; text-align: left; padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; text-transform: uppercase; font-weight: 800; color: #64748b; }
+              td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; font-weight: 500; }
+              @media print {
+                @page { margin: 2cm; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>${title}</h1>
+              <p>${levelTitle} - Generated on ${new Date().toLocaleString()}</p>
+            </div>
+            ${contentHtml || '<p style="text-align: center; color: #64748b; margin-top: 40px;">No trip data found for the selected period.</p>'}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    } else {
+      window.print();
+    }
   };
 
   if (isLoading) {
@@ -249,6 +441,12 @@ const ReportsView: React.FC = () => {
           >
             Logistics Trace Report
           </button>
+          <button 
+            onClick={() => setActiveTab('trips')}
+            className={`px-6 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'trips' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400'}`}
+          >
+            Trip Audit Report
+          </button>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-4">
@@ -256,38 +454,68 @@ const ReportsView: React.FC = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
-              placeholder="Search batches, assets, or locations..." 
+              placeholder={activeTab === 'trips' ? "Search drivers or trucks..." : "Search batches, assets, or locations..."}
               className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900 transition-all"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
-          <div className="flex flex-wrap gap-4">
-            <select 
-              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-              value={selectedBranch}
-              onChange={e => setSelectedBranch(e.target.value)}
-            >
-              <option value="all">All Branches</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-            <select 
-              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-              value={selectedPartnerType}
-              onChange={e => setSelectedPartnerType(e.target.value)}
-            >
-              <option value="all">All Partner Types</option>
-              {Object.values(PartnerType).map(pt => <option key={pt} value={pt}>{pt}</option>)}
-            </select>
-            <select 
-              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-              value={selectedAssetType}
-              onChange={e => setSelectedAssetType(e.target.value)}
-            >
-              <option value="all">All Asset Types</option>
-              {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
+          
+          {activeTab === 'trips' ? (
+            <div className="flex flex-wrap gap-4 items-center">
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
+                <Calendar size={14} className="text-slate-400" />
+                <input 
+                  type="date" 
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="bg-transparent border-none text-xs font-bold outline-none"
+                />
+                <span className="text-slate-300">to</span>
+                <input 
+                  type="date" 
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  className="bg-transparent border-none text-xs font-bold outline-none"
+                />
+              </div>
+              <select 
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={tripReportLevel}
+                onChange={e => setTripReportLevel(e.target.value as 'driver' | 'location')}
+              >
+                <option value="driver">Driver Level</option>
+                <option value="location">Location Level</option>
+              </select>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-4">
+              <select 
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={selectedBranch}
+                onChange={e => setSelectedBranch(e.target.value)}
+              >
+                <option value="all">All Branches</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              <select 
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={selectedPartnerType}
+                onChange={e => setSelectedPartnerType(e.target.value)}
+              >
+                <option value="all">All Partner Types</option>
+                {Object.values(PartnerType).map(pt => <option key={pt} value={pt}>{pt}</option>)}
+              </select>
+              <select 
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={selectedAssetType}
+                onChange={e => setSelectedAssetType(e.target.value)}
+              >
+                <option value="all">All Asset Types</option>
+                {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -374,7 +602,7 @@ const ReportsView: React.FC = () => {
             )}
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'trace' ? (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <HistoryIcon size={18} className="text-emerald-500" />
@@ -415,6 +643,60 @@ const ReportsView: React.FC = () => {
                 {Object.keys(stats.conditionSummary).length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-20 text-center text-slate-400 italic text-sm">No trace data found for this branch.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Truck size={18} className="text-amber-500" />
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Trip Audit Report</h3>
+            </div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stats.filteredTrips.length} Trips Found</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/30">
+                  <th className="px-6 py-4">Trip ID</th>
+                  <th className="px-6 py-4">Date</th>
+                  <th className="px-6 py-4">Driver</th>
+                  <th className="px-6 py-4">Truck</th>
+                  <th className="px-6 py-4">Route</th>
+                  <th className="px-6 py-4 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {stats.filteredTrips.map(trip => {
+                  const driver = drivers.find(d => d.id === trip.driver_id);
+                  const truck = trucks.find(t => t.id === trip.truck_id);
+                  return (
+                    <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 text-xs font-black text-slate-900">{trip.id}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-700">{trip.scheduled_date}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-700">{driver?.full_name}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-700">{truck?.plate_number}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-700">{trip.route_name}</td>
+                      <td className="px-6 py-4 text-right">
+                        <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${
+                          trip.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
+                          trip.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                          trip.status === 'Cancelled' ? 'bg-rose-100 text-rose-700' :
+                          'bg-slate-100 text-slate-700'
+                        }`}>
+                          {trip.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {stats.filteredTrips.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-20 text-center text-slate-400 italic text-sm">No trips found for the selected period.</td>
                   </tr>
                 )}
               </tbody>
