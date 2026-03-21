@@ -143,7 +143,7 @@ const AppContent: React.FC = () => {
     // Explicit module rendering
     switch (activeTab) {
       case NavItem.DASHBOARD: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} onSchemaFix={() => setActiveTab(NavItem.SCHEMA)} />;
-      case NavItem.EXECUTIVE_REPORT: return <ExecutiveReport />;
+      case NavItem.EXECUTIVE_REPORT: return <ExecutiveReport onNavigate={(tab) => setActiveTab(tab as NavItem)} />;
       case NavItem.INVENTORY: return <InventoryDashboard />;
       case NavItem.INVENTORY_MAP: return <InventoryMap />;
       case NavItem.FINANCIALS: return <FinancialReport branchContext={currentBranchContext as any} />;
