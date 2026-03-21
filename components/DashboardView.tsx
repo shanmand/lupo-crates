@@ -29,39 +29,52 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         let activityQuery = supabase.from('vw_batch_forensics').select('*').limit(20);
 
         if (branchContext && branchContext !== 'Consolidated') {
-          // Assuming branchContext is the branch name, we might need branch_id or branch_name filter
-          // The request says "If a variable like selectedBranchId is 'Consolidated' or empty, the query must skip the .eq('branch_id', ...) filter"
-          // So I'll assume we filter by branch_id if we have it, but here we have branchContext as name.
-          // Let's check if vw_dashboard_stats has branch_name or branch_id.
-          // For now, I'll follow the rule for branch_id if I can find it.
-          // Since I don't see branch_id in the props, I'll use branchContext as a placeholder for the logic.
           statsQuery = statsQuery.eq('branch_name', branchContext);
           activityQuery = activityQuery.eq('branch_name', branchContext);
         }
 
         const [statsRes, activityRes] = await Promise.all([
-          statsQuery.single(),
-          activityQuery.order('transaction_date', { ascending: false })
+          branchContext === 'Consolidated' ? statsQuery : statsQuery.single(),
+          activityQuery.order('date', { ascending: false })
         ]);
 
         if (statsRes.error) console.log("Supabase Stats Error:", statsRes.error);
         if (activityRes.error) console.log("Supabase Activity Error:", activityRes.error);
 
-        setStats(statsRes.data || {
-          available: 0,
-          at_customers: 0,
-          in_transit: 0,
-          maintenance: 0,
-          total_fleet: 0,
-          lost_missing: 0,
-          damaged: 0,
-          pending_charges: 0,
-          open_loss_cases: 0,
-          accrued_rental: 0,
-          settlement_liability: 0,
-          active_customers: 0,
-          movements_today: 0
-        });
+        if (branchContext === 'Consolidated' && Array.isArray(statsRes.data)) {
+          const consolidated = statsRes.data.reduce((acc, curr) => ({
+            available: (acc.available || 0) + (curr.available || 0),
+            at_customers: (acc.at_customers || 0) + (curr.at_customers || 0),
+            in_transit: (acc.in_transit || 0) + (curr.in_transit || 0),
+            maintenance: (acc.maintenance || 0) + (curr.maintenance || 0),
+            total_fleet: (acc.total_fleet || 0) + (curr.total_fleet || 0),
+            lost_missing: (acc.lost_missing || 0) + (curr.lost_missing || 0),
+            damaged: (acc.damaged || 0) + (curr.damaged || 0),
+            pending_charges: (acc.pending_charges || 0) + (curr.pending_charges || 0),
+            open_loss_cases: (acc.open_loss_cases || 0) + (curr.open_loss_cases || 0),
+            accrued_rental: (acc.accrued_rental || 0) + (curr.accrued_rental || 0),
+            settlement_liability: (acc.settlement_liability || 0) + (curr.settlement_liability || 0),
+            active_customers: (acc.active_customers || 0) + (curr.active_customers || 0),
+            movements_today: (acc.movements_today || 0) + (curr.movements_today || 0)
+          }), {} as DashboardStats);
+          setStats(consolidated);
+        } else {
+          setStats(statsRes.data || {
+            available: 0,
+            at_customers: 0,
+            in_transit: 0,
+            maintenance: 0,
+            total_fleet: 0,
+            lost_missing: 0,
+            damaged: 0,
+            pending_charges: 0,
+            open_loss_cases: 0,
+            accrued_rental: 0,
+            settlement_liability: 0,
+            active_customers: 0,
+            movements_today: 0
+          });
+        }
         setRecentActivity(activityRes.data || []);
       } catch (err) {
         console.error("Dashboard Fetch Error:", err);
