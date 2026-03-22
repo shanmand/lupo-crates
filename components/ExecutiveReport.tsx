@@ -109,7 +109,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
   }
 
   // Calculate global insights
-  const totalDrainage = reportData.reduce((sum, d) => sum + d.financial_drainage, 0);
+  const totalDrainage = reportData.reduce((sum, d) => sum + (d.financial_drainage || 0), 0);
   const topDrainBranch = reportData[0];
   const potentialSavings = totalDrainage * 0.1;
 
@@ -187,7 +187,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
                         <ShieldAlert size={14} />
                         <p className="text-[10px] font-bold uppercase tracking-widest">Loss Ratio</p>
                       </div>
-                      <p className={`text-2xl font-black ${bp.loss_ratio > 2 ? 'text-rose-600' : 'text-emerald-600'}`}>{bp.loss_ratio.toFixed(2)}%</p>
+                      <p className={`text-2xl font-black ${(bp.loss_ratio || 0) > 2 ? 'text-rose-600' : 'text-emerald-600'}`}>{(bp.loss_ratio || 0).toFixed(2)}%</p>
                       <p className="text-[10px] text-slate-400 font-medium">Shrinkage threshold 1.5%</p>
                    </div>
 
@@ -196,7 +196,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
                         <Calculator size={14} />
                         <p className="text-[10px] font-bold uppercase tracking-widest">Drainage</p>
                       </div>
-                      <p className="text-2xl font-black text-rose-700">R {formatCurrency(bp.financial_drainage)}</p>
+                      <p className="text-2xl font-black text-rose-700">R {formatCurrency(bp.financial_drainage || 0)}</p>
                       <p className="text-[10px] text-slate-400 font-medium">Accrued sitting fees</p>
                    </div>
                 </div>
@@ -245,7 +245,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
            <div className="flex-1">
               <h4 className="text-lg font-bold">Executive Insight: Reducing Drainage</h4>
               <p className="text-sm text-emerald-100 leading-relaxed mt-1">
-                Currently, <strong>{topDrainBranch.branch_name}</strong> is responsible for {((topDrainBranch.financial_drainage / (totalDrainage || 1)) * 100).toFixed(0)}% of global financial drainage due to assets sitting idle for over 21 days. A 10% reduction in stagnation time across the fleet would result in a monthly 
+                Currently, <strong>{topDrainBranch.branch_name}</strong> is responsible for {(((topDrainBranch.financial_drainage || 0) / (totalDrainage || 1)) * 100).toFixed(0)}% of global financial drainage due to assets sitting idle for over 21 days. A 10% reduction in stagnation time across the fleet would result in a monthly 
                 saving of approximately <strong>R {formatCurrency(potentialSavings)}</strong> in unbilled daily rental fees.
               </p>
            </div>
