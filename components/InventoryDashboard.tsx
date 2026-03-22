@@ -1,326 +1,284 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { MOCK_LOCATIONS, MOCK_BATCHES, MOCK_ASSETS, MOCK_FEES } from '../constants';
-import { MapPin, ThermometerSnowflake, Truck, ShoppingCart, Home, Building2, TrendingUp, Info, Loader2, Filter, Search, Calendar } from 'lucide-react';
-import { LocationType, LocationCategory, Location, Batch, AssetMaster, FeeSchedule, Branch, ThaanSlip } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Package, MapPin, TrendingUp, AlertCircle, Plus, Search, Loader2, CheckCircle2, ArrowRight, History, Download } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { User, AssetMaster, Location } from '../types';
 
 interface InventoryDashboardProps {
-  branchContext?: string;
+  currentUser: User;
 }
 
-const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ branchContext = 'Consolidated' }) => {
-  console.log('InventoryDashboard Rendering...', { branchContext });
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
+const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) => {
+  const [inventory, setInventory] = useState<any[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
-  const [fees, setFees] = useState<FeeSchedule[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [thaanSlips, setThaanSlips] = useState<ThaanSlip[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showIntakeModal, setShowIntakeModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
-  // Filters
-  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  // Intake Form State
+  const [intakeForm, setIntakeForm] = useState({
+    asset_id: '',
+    quantity: 0,
+    location_id: '',
+    notes: ''
+  });
 
-  useEffect(() => {
-    if (branches.length > 0 && branchContext !== 'Consolidated') {
-      const branch = branches.find(b => b.name === branchContext);
-      if (branch) setSelectedBranch(branch.id);
-    } else if (branchContext === 'Consolidated') {
-      setSelectedBranch('all');
+  const fetchData = async () => {
+    if (!isSupabaseConfigured) {
+      setIsLoading(false);
+      return;
     }
-  }, [branchContext, branches]);
+    setIsLoading(true);
+    try {
+      const [invRes, assetRes, locRes] = await Promise.all([
+        supabase.from('vw_inventory_summary').select('*'),
+        supabase.from('asset_master').select('*'),
+        supabase.from('locations').select('*').eq('partner_type', 'Internal')
+      ]);
 
-  const [selectedAsset, setSelectedAsset] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+      if (invRes.data) setInventory(invRes.data);
+      if (assetRes.data) setAssets(assetRes.data);
+      if (locRes.data) setLocations(locRes.data);
+    } catch (error) {
+      console.error('Error fetching inventory data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      console.log('InventoryDashboard: Fetching data... Configured:', isSupabaseConfigured);
-      if (!isSupabaseConfigured) {
-        console.log('InventoryDashboard: Using mock data...');
-        setLocations(MOCK_LOCATIONS);
-        setBatches(MOCK_BATCHES);
-        setAssets(MOCK_ASSETS);
-        setFees(MOCK_FEES);
-        setBranches([{ id: 'BR-01', name: 'Kya Sands', address: '123 Main St' }, { id: 'BR-02', name: 'Durban', address: '456 Beach Rd' }]);
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        // Use the view for accurate liability calculation and to include all sources (locations + business parties)
-        const [locsRes, batchesRes, assetsRes, feesRes, branchesRes, thaansRes] = await Promise.all([
-          supabase.from('vw_all_sources').select('*'),
-          supabase.from('vw_batch_accruals').select('*'),
-          supabase.from('asset_master').select('*'),
-          supabase.from('fee_schedule').select('*'),
-          supabase.from('branches').select('*'),
-          supabase.from('thaan_slips').select('*')
-        ]);
-
-        console.log('InventoryDashboard Data Received:', {
-          locations: locsRes.data?.length,
-          batches: batchesRes.data?.length,
-          assets: assetsRes.data?.length,
-          branches: branchesRes.data?.length
-        });
-
-        if (locsRes.data) {
-          // De-duplicate locations by ID to prevent React key errors
-          const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
-          setLocations(uniqueLocs);
-        }
-        if (batchesRes.data && batchesRes.data.length > 0) {
-          // Map view data back to Batch type or handle it specifically
-          const mapped = batchesRes.data.map((b: any) => ({
-            ...b,
-            id: b.batch_id,
-            // Ensure we have the accrued_amount available as a number
-            accrued_amount: Number(b.accrued_amount || 0)
-          }));
-          // De-duplicate batches
-          const uniqueBatches = Array.from(new Map(mapped.map((b: any) => [b.id, b])).values());
-          setBatches(uniqueBatches);
-        } else if (!isSupabaseConfigured) {
-          setBatches(MOCK_BATCHES);
-        }
-        if (assetsRes.data) setAssets(assetsRes.data);
-        if (feesRes.data) setFees(feesRes.data);
-        if (branchesRes.data) setBranches(branchesRes.data);
-        if (thaansRes.data) setThaanSlips(thaansRes.data);
-      } catch (err) {
-        console.error("Inventory Fetch Error:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
-  const filteredLocations = useMemo(() => {
-    return locations.filter(loc => {
-      const matchesBranch = selectedBranch === 'all' || loc.branch_id === selectedBranch;
-      const matchesSearch = loc.name.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const inventory = batches.filter(b => b.current_location_id === loc.id);
-      const matchesAsset = selectedAsset === 'all' || inventory.some(b => b.asset_id === selectedAsset);
-      
-      const matchesDate = inventory.some(b => {
-        const created = new Date(b.transaction_date || b.created_at);
-        return (!startDate || created >= new Date(startDate)) &&
-               (!endDate || created <= new Date(endDate));
-      }) || (inventory.length === 0 && !startDate && !endDate);
+  const handleIntakeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSupabaseConfigured || isSubmitting) return;
 
-      return matchesBranch && matchesSearch && matchesAsset && matchesDate;
-    });
-  }, [locations, batches, selectedBranch, selectedAsset, searchQuery, startDate, endDate]);
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.rpc('process_inventory_intake', {
+        p_asset_id: intakeForm.asset_id,
+        p_quantity: intakeForm.quantity,
+        p_location_id: intakeForm.location_id,
+        p_notes: intakeForm.notes,
+        p_user_id: currentUser.id
+      });
 
-  // Logic: Use the pre-calculated accrued amount from the view
-  const calculateAccruedCost = (batchId: string) => {
-    const batch = batches.find(b => b.id === batchId);
-    const amount = (batch as any)?.accrued_amount;
-    return (amount === null || amount === undefined || isNaN(amount)) ? 0 : Number(amount);
-  };
+      if (error) throw error;
 
-  const getInventoryAtLocation = (locationId: string) => {
-    return batches.filter(b => b.current_location_id === locationId);
-  };
-
-  const getLocationIcon = (type: LocationType) => {
-    switch (type) {
-      case LocationType.COLD_STORAGE: return <ThermometerSnowflake className="text-blue-500" />;
-      case LocationType.IN_TRANSIT: return <Truck className="text-amber-500" />;
-      case LocationType.AT_CUSTOMER: return <ShoppingCart className="text-rose-500" />;
-      case LocationType.CRATES_DEPT: return <Home className="text-emerald-500" />;
-      default: return <Building2 className="text-slate-400" />;
+      setNotification({ message: `Inventory intake successful. Batch ID: ${data}`, type: 'success' });
+      setShowIntakeModal(false);
+      setIntakeForm({ asset_id: '', quantity: 0, location_id: '', notes: '' });
+      fetchData();
+    } catch (error: any) {
+      setNotification({ message: error.message || 'Failed to process intake', type: 'error' });
+    } finally {
+      setIsSubmitting(false);
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
-  const formatCurrency = (val: number | null | undefined) => {
-    if (val === null || val === undefined || isNaN(val as number)) return '0.00';
-    return (val as number).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-  const totalGlobalLiability = batches.reduce((acc, b) => acc + calculateAccruedCost(b.id), 0);
+  const filteredInventory = inventory.filter(item => 
+    item.location_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.asset_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  console.log('InventoryDashboard Counts:', {
-    totalLocations: locations.length,
-    filteredLocations: filteredLocations.length,
-    homeLocations: filteredLocations.filter(l => l.category === LocationCategory.HOME).length,
-    externalStorage: filteredLocations.filter(l => l.type === LocationType.COLD_STORAGE || l.category === LocationCategory.EXTERNAL).length
-  });
+  const totalUnits = inventory.reduce((acc, curr) => acc + curr.total_quantity, 0);
+  const totalBatches = inventory.reduce((acc, curr) => acc + curr.batch_count, 0);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
-        <Loader2 className="animate-spin text-amber-500" size={32} />
+        <Loader2 className="animate-spin text-slate-900" size={32} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-20">
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-200">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Global Possessive Liability</p>
-          <p className="text-3xl font-bold">R {formatCurrency(totalGlobalLiability)}</p>
-          <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold mt-2 uppercase">
-            <TrendingUp size={12} /> Accruing in real-time
-          </div>
+    <div className="max-w-7xl mx-auto space-y-8 pb-20">
+      {notification && (
+        <div className={`fixed bottom-8 right-8 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-right ${notification.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
+          {notification.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+          <p className="text-sm font-bold">{notification.message}</p>
         </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Home Locations</p>
-            <p className="text-2xl font-bold text-slate-800">
-              {filteredLocations.filter(l => l.category === LocationCategory.HOME).length} Sites
-            </p>
-          </div>
-          <Home className="text-emerald-500 opacity-20" size={40} />
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">External Storage</p>
-            <p className="text-2xl font-bold text-slate-800">
-              {filteredLocations.filter(l => l.type === LocationType.COLD_STORAGE || l.category === LocationCategory.EXTERNAL).length} Sites
-            </p>
-          </div>
-          <ThermometerSnowflake className="text-blue-500 opacity-20" size={40} />
-        </div>
-      </div>
+      )}
 
-      {/* Filters */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search locations..." 
-              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900 transition-all"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <select 
-              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-              value={selectedBranch}
-              onChange={e => setSelectedBranch(e.target.value)}
-            >
-              <option value="all">All Branches</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-            <select 
-              className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-              value={selectedAsset}
-              onChange={e => setSelectedAsset(e.target.value)}
-            >
-              <option value="all">All Assets</option>
-              {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-              <Calendar size={16} className="text-slate-400" />
-              <input 
-                type="date" 
-                className="bg-transparent text-xs font-bold outline-none"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-              />
-              <span className="text-slate-300">-</span>
-              <input 
-                type="date" 
-                className="bg-transparent text-xs font-bold outline-none"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-              />
+      {/* Header & Stats */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase">Inventory</h1>
+          <p className="text-slate-500 font-medium mt-1">Real-time stock levels across all locations</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-900">
+              <Package size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Assets</p>
+              <p className="text-xl font-black text-slate-900">{totalUnits.toLocaleString()}</p>
             </div>
           </div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-900">
+              <History size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Batches</p>
+              <p className="text-xl font-black text-slate-900">{totalBatches.toLocaleString()}</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setShowIntakeModal(true)}
+            className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center gap-3"
+          >
+            <Plus size={18} /> New Intake
+          </button>
         </div>
       </div>
 
-      {/* Location Map View */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-           <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest flex items-center gap-2">
-             <MapPin size={16} className="text-rose-500" /> Multi-Site Live Map Summary
-           </h3>
-           <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Home</span>
-              <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" /> Cold Storage</span>
-              <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500" /> In Transit</span>
-           </div>
+      {/* Search & Filters */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input 
+            type="text"
+            placeholder="Search by location or asset type..."
+            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900 transition-all"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
         </div>
+        <button className="p-3 text-slate-400 hover:text-slate-900 transition-colors">
+          <Download size={20} />
+        </button>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 divide-x divide-y divide-slate-100">
-          {filteredLocations.map(loc => {
-            const inventory = getInventoryAtLocation(loc.id);
-            const locationCost = inventory.reduce((acc, b) => acc + calculateAccruedCost(b.id), 0);
-            const totalUnits = inventory.reduce((acc, b) => acc + b.quantity, 0);
-
-            return (
-              <div key={loc.id} className="p-6 hover:bg-slate-50/50 transition-colors space-y-4">
-                <div className="flex items-start justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg bg-white border border-slate-100 shadow-sm`}>
-                        {getLocationIcon(loc.type)}
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-800 leading-tight">{loc.name}</p>
-                        <p className={`text-[10px] font-bold uppercase ${loc.category === LocationCategory.HOME ? 'text-emerald-500' : 'text-slate-400'}`}>
-                          {loc.category} • {loc.type}
-                        </p>
-                      </div>
-                   </div>
-                   <div className="text-right">
-                      <p className="text-lg font-bold text-slate-800">{totalUnits}</p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Total Units</p>
-                   </div>
+      {/* Inventory Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredInventory.map((item, idx) => (
+          <div key={`${item.location_id}-${item.asset_id}-${idx}`} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all group">
+            <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-slate-200">
+                  <MapPin size={20} />
                 </div>
-
-                <div className="space-y-2">
-                   {inventory.length > 0 ? inventory.map(batch => (
-                     <div key={batch.id} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-[11px]">
-                        <span className="font-bold text-slate-600">Batch #{batch.id}</span>
-                        <span className="text-slate-400">{assets.find(a => a.id === batch.asset_id)?.name}</span>
-                        <span className="font-bold text-slate-800">{batch.quantity}</span>
-                     </div>
-                   )) : (
-                     <div className="text-center py-2 text-[10px] text-slate-300 italic">No Active Load</div>
-                   )}
-                </div>
-
-                <div className="pt-4 border-t border-slate-50 flex justify-between items-end">
-                   <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Accrued Cost</p>
-                      <p className={`font-bold ${locationCost > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                        R {formatCurrency(locationCost)}
-                      </p>
-                   </div>
-                   <button className="text-[10px] font-bold text-blue-600 hover:underline">Audits (v2.1)</button>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">{item.location_name}</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.location_type}</p>
                 </div>
               </div>
-            );
-          })}
-        </div>
+              <div className="text-right">
+                <p className="text-2xl font-black text-slate-900">{item.total_quantity.toLocaleString()}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Units</p>
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-white rounded-lg border border-slate-100 flex items-center justify-center text-slate-400">
+                  <Package size={14} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-700">{item.asset_name}</p>
+                  <p className="text-[10px] font-medium text-slate-400">{item.batch_count} Batches</p>
+                </div>
+              </div>
+              <button className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white transition-all">
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Possession Logic Notice */}
-      <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl flex gap-4">
-         <Info className="text-blue-500 shrink-0" size={24} />
-         <div>
-            <h4 className="font-bold text-blue-900 text-sm">Cold Storage Possession Policy</h4>
-            <p className="text-xs text-blue-800 mt-1 leading-relaxed">
-              Assets located at <strong>External Cold Storage</strong> sites are considered 'In Possession'. 
-              Daily rental fees continue to accrue as these locations are managed as high-possession vaults. 
-              Only successful transfers to <strong>'At Customer'</strong> or <strong>'Returning to Supplier'</strong> locations (with signed THAAN slips) pause the possession timer.
-            </p>
-         </div>
-      </div>
+      {/* Intake Modal */}
+      {showIntakeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-8 py-6 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Plus size={20} className="text-emerald-400" />
+                <h3 className="font-black text-sm uppercase tracking-widest">Inventory Intake</h3>
+              </div>
+              <button onClick={() => setShowIntakeModal(false)} className="text-slate-400 hover:text-white transition-colors">
+                <CheckCircle2 size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleIntakeSubmit} className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset Type</label>
+                <select 
+                  required
+                  className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900"
+                  value={intakeForm.asset_id}
+                  onChange={e => setIntakeForm({...intakeForm, asset_id: e.target.value})}
+                >
+                  <option value="">Select Asset...</option>
+                  {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantity</label>
+                  <input 
+                    required
+                    type="number"
+                    min="1"
+                    className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900"
+                    value={intakeForm.quantity || ''}
+                    onChange={e => setIntakeForm({...intakeForm, quantity: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</label>
+                  <select 
+                    required
+                    className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900"
+                    value={intakeForm.location_id}
+                    onChange={e => setIntakeForm({...intakeForm, location_id: e.target.value})}
+                  >
+                    <option value="">Select Location...</option>
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Notes / Reference</label>
+                <textarea 
+                  className="w-full border border-slate-200 rounded-xl p-4 text-sm font-medium bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900 h-24 resize-none"
+                  placeholder="E.g. Supplier delivery note #12345"
+                  value={intakeForm.notes}
+                  onChange={e => setIntakeForm({...intakeForm, notes: e.target.value})}
+                />
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setShowIntakeModal(false)}
+                  className="flex-1 px-6 py-4 border border-slate-200 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="flex-[2] bg-slate-900 text-white font-black py-4 rounded-2xl shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-3 uppercase tracking-widest disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                  Confirm Intake
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

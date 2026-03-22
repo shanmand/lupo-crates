@@ -1,48 +1,29 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { MapPin, Package, Building2, TrendingUp, Zap, Loader2, Search, Filter, ArrowRight, Layers, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { MOCK_BATCHES, MOCK_LOCATIONS } from '../constants';
-import { MapPin, Building2, Flame, TrendingUp, Zap, Clock, AlertCircle, Loader2 } from 'lucide-react';
-
-interface InventoryRecord {
-  branch_name: string;
-  current_location: string;
-  daily_accrued_liability: number;
-  batch_count: number;
-  batch_id: string;
-}
 
 const InventoryMap: React.FC = () => {
-  const [data, setData] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState('Global');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!isSupabaseConfigured) {
-        console.log('InventoryMap: Using mock data...');
-        const mockData = MOCK_BATCHES.map(b => {
-          const loc = MOCK_LOCATIONS.find(l => l.id === b.current_location_id);
-          return {
-            ...b,
-            batch_id: b.id,
-            current_location: loc?.name || 'Unknown',
-            branch_name: loc?.branch_id === 'BR-01' ? 'Kya Sands' : (loc?.branch_id === 'BR-02' ? 'Durban' : 'Consolidated'),
-            daily_accrued_liability: (b as any).accrued_amount || 0
-          };
-        });
-        setData(mockData);
         setIsLoading(false);
         return;
       }
       setIsLoading(true);
       try {
-        const { data: results, error } = await supabase
-          .from('vw_global_inventory_tracker')
-          .select('*');
+        const { data, error } = await supabase
+          .from('vw_inventory_map_data')
+          .select('*')
+          .order('total_assets', { ascending: false });
 
         if (error) throw error;
-        setData(results || []);
+        setLocations(data || []);
       } catch (err) {
         console.error("Inventory Map Fetch Error:", err);
       } finally {
@@ -53,118 +34,164 @@ const InventoryMap: React.FC = () => {
     fetchData();
   }, []);
 
-  const branchAggregates = useMemo(() => {
-    const aggregates: Record<string, { liability: number, count: number }> = {};
-    
-    data.forEach(item => {
-      const branch = item?.branch_name || 'Unknown';
-      if (!aggregates[branch]) {
-        aggregates[branch] = { liability: 0, count: 0 };
-      }
-      aggregates[branch].liability += item?.daily_accrued_liability || 0;
-      aggregates[branch].count += 1;
-    });
+  const filteredLocations = useMemo(() => {
+    return locations.filter(l => 
+      l.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.type.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [locations, searchTerm]);
 
-    return Object.entries(aggregates).map(([name, stats]) => ({
-      name,
-      ...stats
-    })).sort((a, b) => b.liability - a.liability);
-  }, [data]);
-
-  const totalLiability = useMemo(() => {
-    return data.reduce((acc, item) => acc + (item?.daily_accrued_liability || 0), 0);
-  }, [data]);
-
-  const formatCurrency = (val: number | null | undefined) => {
-    if (val === null || val === undefined || isNaN(val as number)) return '0.00';
-    return (val as number).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
+  const totalAssets = useMemo(() => {
+    return locations.reduce((acc, l) => acc + (l.total_assets || 0), 0);
+  }, [locations]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96 bg-white rounded-3xl border border-slate-200">
-        <div className="text-center space-y-4">
-          <Loader2 className="animate-spin text-slate-400 mx-auto" size={32} />
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mapping Global Liabilities...</p>
-        </div>
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="animate-spin text-slate-900" size={32} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-7xl mx-auto space-y-8 pb-20">
+      {/* Header & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
             <TrendingUp size={120} />
           </div>
           <div className="relative z-10 space-y-2">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Accrued Liability</p>
-            <p className="text-5xl font-black tracking-tighter">R {formatCurrency(totalLiability)}</p>
-            <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest flex items-center gap-2">
-              <Zap size={12} /> Live Financial Exposure
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Global Asset Distribution</p>
+            <p className="text-5xl font-black tracking-tighter">{totalAssets.toLocaleString()}</p>
+            <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+              <Zap size={12} /> Live Inventory Pulse
             </p>
           </div>
         </div>
 
         <div className="bg-white rounded-3xl p-8 border border-slate-200 flex items-center justify-between group hover:border-slate-300 transition-all">
           <div className="space-y-2">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Inventory Units</p>
-            <p className="text-4xl font-black text-slate-900">{data.reduce((acc, i) => acc + (i?.quantity || 0), 0)}</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Nodes</p>
+            <p className="text-4xl font-black text-slate-900">{locations.length}</p>
             <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-2">
-              <Building2 size={12} /> Across {branchAggregates.length} Branches
+              <Building2 size={12} /> Across all branches
             </p>
           </div>
           <div className="p-4 bg-emerald-50 rounded-2xl text-emerald-600 group-hover:scale-110 transition-transform">
-            <MapPin size={32} />
+            <Layers size={32} />
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">Branch Liability Distribution</h4>
-          <div className="flex items-center gap-4 text-[9px] font-black uppercase tracking-widest text-slate-400">
-             Heat Map Aggregation by Branch Name
+      {/* Map View Interface */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px]">
+        {/* Sidebar: Location List */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="p-6 border-b border-slate-100 space-y-4">
+            <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">Location Registry</h4>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input 
+                type="text"
+                placeholder="Search nodes..."
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+            {filteredLocations.map(loc => (
+              <button 
+                key={loc.id}
+                onClick={() => setSelectedLocation(loc)}
+                className={`w-full p-6 text-left hover:bg-slate-50 transition-all flex items-center justify-between group ${selectedLocation?.id === loc.id ? 'bg-slate-50 border-r-4 border-slate-900' : ''}`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${loc.total_assets > 1000 ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    <MapPin size={18} />
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-black text-slate-900 uppercase tracking-tight">{loc.name}</h5>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{loc.type}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-black text-slate-900">{loc.total_assets.toLocaleString()}</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Units</p>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="p-8 space-y-8">
-          {branchAggregates.map((branch) => {
-            const maxLiability = Math.max(...branchAggregates.map(b => b.liability), 1);
-            const percentage = (branch.liability / maxLiability) * 100;
-
-            return (
-              <div key={branch.name} className="space-y-3 group">
-                <div className="flex justify-between items-end">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Building2 size={12} className="text-slate-400" />
-                      <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{branch.name}</span>
+        {/* Main: Visual Map Representation */}
+        <div className="lg:col-span-2 bg-slate-50 rounded-3xl border border-slate-200 relative overflow-hidden flex items-center justify-center p-8">
+          {/* Stylized Map Grid */}
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+          
+          {selectedLocation ? (
+            <div className="relative z-10 w-full max-w-md animate-in zoom-in-95 duration-300">
+              <div className="bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden">
+                <div className="p-8 bg-slate-900 text-white">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                      <MapPin size={32} />
                     </div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{branch.count} Active Batches</p>
+                    <button onClick={() => setSelectedLocation(null)} className="text-slate-400 hover:text-white transition-colors">
+                      <X size={24} />
+                    </button>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-lg font-black ${branch.liability > 10000 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      R {formatCurrency(branch.liability)}
-                    </p>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Accrued</p>
-                  </div>
+                  <h3 className="text-2xl font-black uppercase tracking-tighter mb-1">{selectedLocation.name}</h3>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedLocation.type} • {selectedLocation.branch_id}</p>
                 </div>
-                
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-1000 ease-out ${
-                      branch.liability > 10000 ? 'bg-rose-500' : 
-                      branch.liability > 5000 ? 'bg-amber-500' : 
-                      'bg-emerald-500'
-                    }`}
-                    style={{ width: `${Math.max(percentage, 2)}%` }}
-                  />
+                <div className="p-8 space-y-6">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="p-4 bg-slate-50 rounded-2xl">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Stock</p>
+                      <p className="text-2xl font-black text-slate-900">{selectedLocation.total_assets.toLocaleString()}</p>
+                    </div>
+                    <div className="p-4 bg-slate-50 rounded-2xl">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Asset Types</p>
+                      <p className="text-2xl font-black text-slate-900">{selectedLocation.asset_types}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coordinates</p>
+                    <p className="text-xs font-mono font-bold text-slate-600">
+                      LAT: {selectedLocation.latitude || 'N/A'} | LNG: {selectedLocation.longitude || 'N/A'}
+                    </p>
+                  </div>
+                  <button className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-3">
+                    View Detailed Inventory <ArrowRight size={16} />
+                  </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ) : (
+            <div className="text-center space-y-6 relative z-10">
+              <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto shadow-xl border border-slate-100 text-slate-300">
+                <Layers size={48} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Select a Node</h3>
+                <p className="text-sm font-medium text-slate-400">Choose a location from the sidebar to view its distribution profile</p>
+              </div>
+            </div>
+          )}
+
+          {/* Floating Markers (Visual Only) */}
+          {filteredLocations.slice(0, 10).map((loc, idx) => (
+            <div 
+              key={`marker-${loc.id}`}
+              className="absolute w-3 h-3 bg-slate-900/20 rounded-full animate-pulse"
+              style={{ 
+                top: `${20 + (idx * 7) % 60}%`, 
+                left: `${20 + (idx * 13) % 60}%` 
+              }}
+            />
+          ))}
         </div>
       </div>
     </div>
