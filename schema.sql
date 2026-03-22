@@ -818,6 +818,7 @@ CREATE POLICY "trip_stops_manage" ON public.trip_stops FOR ALL TO authenticated 
 INSERT INTO public.branches (id, name) VALUES ('BR-01', 'Kya Sands'), ('BR-02', 'Durban') ON CONFLICT DO NOTHING;
 
 INSERT INTO public.locations (id, name, type, category, branch_id, partner_type) VALUES 
+('WH-001', 'Default Central Warehouse', 'Warehouse', 'Home', 'BR-01', 'Internal'),
 ('LOC-JHB-01', 'Lupo JHB Main Plant (Kya Sands)', 'Crates Dept', 'Home', 'BR-01', 'Internal'),
 ('LOC-DBN-01', 'Lupo Durban Plant', 'Crates Dept', 'Home', 'BR-02', 'Internal'),
 ('LOC-JHB-WH1', 'Kya Sands Warehouse 1', 'Warehouse', 'Home', 'BR-01', 'Internal'),
@@ -843,6 +844,8 @@ INSERT INTO public.drivers (id, full_name, branch_id) VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.asset_master (id, name, type, dimensions, material, supplier_id) VALUES 
+('CRT-STD', 'Standard Bread Crate', 'Crate', '600x400x150mm', 'HDPE', 'LOC-SUP-01'),
+('PLT-STD', 'Standard Industrial Pallet', 'Pallet', '1200x1000mm', 'Wood', 'LOC-SUP-01'),
 ('SH-001', 'Lupo Standard Bread Crate', 'Crate', '600x400x150mm', 'HDPE-Amber', 'LOC-SUP-01'),
 ('SH-P01', 'Heavy Duty Flour Pallet', 'Pallet', '1200x1000mm', 'Reinforced Pine', 'LOC-SUP-01')
 ON CONFLICT DO NOTHING;
@@ -1068,6 +1071,21 @@ SELECT
 FROM public.asset_master a
 LEFT JOIN public.batches b ON a.id = b.asset_id
 GROUP BY a.id, a.name, a.type;
+
+DROP VIEW IF EXISTS public.vw_asset_registry CASCADE;
+CREATE OR REPLACE VIEW public.vw_asset_registry AS
+SELECT 
+    b.id as asset_code,
+    a.type as asset_type,
+    a.ownership_type as ownership,
+    b.status,
+    b.condition,
+    s.name as customer,
+    a.billing_model as charge_type,
+    public.calculate_batch_accrual(b.id) as accrued
+FROM public.batches b
+JOIN public.asset_master a ON b.asset_id = a.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 -- Relax foreign key on batches to allow business party IDs
 ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS batches_current_location_id_fkey;

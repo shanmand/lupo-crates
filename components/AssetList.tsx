@@ -36,14 +36,14 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
     try {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
-          .from('vw_asset_intelligence')
+          .from('vw_asset_registry')
           .select('*');
         
         if (error) throw error;
         if (data) setAssets(data);
       }
     } catch (err) {
-      console.error("Asset Intelligence Fetch Error:", err);
+      console.error("Asset Registry Fetch Error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -139,7 +139,13 @@ const AssetList: React.FC<AssetListProps> = ({ isAdmin }) => {
       fetchData();
     } catch (err) {
       console.error("Submit Asset Error:", err);
-      alert("Failed to save asset. Please check console for details.");
+      if ((err as any).code === '23505') {
+        alert(`Asset code ${formData.asset_code} already exists. Please use a unique code.`);
+      } else if ((err as any).code === '23503') {
+        alert(`Foreign key violation: ${(err as any).message}. Please ensure the asset type and location are valid.`);
+      } else {
+        alert("Failed to save asset. Please check console for details.");
+      }
     } finally {
       setIsSubmitting(false);
     }
