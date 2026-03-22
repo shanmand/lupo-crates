@@ -358,19 +358,13 @@ export interface AuditLog {
 }
 
 export interface DashboardStats {
-  available: number;
-  at_customers: number;
-  in_transit: number;
-  maintenance: number;
-  total_fleet: number;
-  lost_missing: number;
-  damaged: number;
+  total_units: number;
+  pending_units: number;
+  success_units: number;
+  stagnant_units: number;
   pending_charges: number;
-  open_loss_cases: number;
   accrued_rental: number;
-  settlement_liability: number;
-  active_customers: number;
-  movements_today: number;
+  branch_name: string;
 }
 
 export interface BatchForensics {
@@ -379,8 +373,9 @@ export interface BatchForensics {
   batch_id: string;
   from_location: string;
   to_location: string;
-  driver_name: string;
+  branch_name: string;
   quantity: number;
+  timestamp: string;
 }
 
 export interface AssetIntelligence {

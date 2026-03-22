@@ -1022,83 +1022,73 @@ SELECT * FROM public.vw_all_sources
 ORDER BY sort_group, name;
 
 -- Module 1: Executive Dashboard Overhaul Views
+DROP VIEW IF EXISTS public.vw_dashboard_stats CASCADE;
 CREATE OR REPLACE VIEW public.vw_dashboard_stats AS
-SELECT
+SELECT 
     br.name as branch_name,
-    COALESCE(SUM(CASE WHEN s.category = 'Home' AND s.type != 'In Transit' THEN b.quantity ELSE 0 END), 0) as available,
-    COALESCE(SUM(CASE WHEN s.partner_type = 'Customer' THEN b.quantity ELSE 0 END), 0) as at_customers,
-    COALESCE(SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END), 0) as in_transit,
-    COALESCE(SUM(CASE WHEN b.status = 'Maintenance' THEN b.quantity ELSE 0 END), 0) as maintenance,
-    COALESCE(SUM(b.quantity), 0) as total_fleet,
-    -- Financial Alerts
-    COALESCE(SUM(CASE WHEN b.status = 'Lost' THEN b.quantity ELSE 0 END), 0) as lost_missing,
-    COALESCE(SUM(CASE WHEN b.status = 'Damaged' THEN b.quantity ELSE 0 END), 0) as damaged,
-    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as pending_charges,
-    (SELECT COUNT(*) FROM public.asset_losses al JOIN public.locations l ON al.last_known_location_id = l.id WHERE al.is_settled = FALSE AND l.branch_id = br.id) as open_loss_cases,
-    -- Liability
-    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as accrued_rental,
-    (SELECT COALESCE(SUM(net_payable), 0) FROM public.settlements st WHERE st.supplier_id IN (SELECT id FROM public.locations WHERE branch_id = br.id)) as settlement_liability,
-    (SELECT COUNT(DISTINCT id) FROM public.locations WHERE partner_type = 'Customer' AND branch_id = br.id) as active_customers,
-    (SELECT COALESCE(SUM(quantity), 0) FROM public.batch_movements bm JOIN public.locations l ON bm.to_location_id = l.id WHERE bm.transaction_date = CURRENT_DATE AND l.branch_id = br.id) as movements_today
+    COALESCE(SUM(b.quantity), 0) as total_units,
+    COALESCE(SUM(CASE WHEN b.status = 'Pending' THEN b.quantity ELSE 0 END), 0) as pending_units,
+    COALESCE(SUM(CASE WHEN b.status = 'Success' THEN b.quantity ELSE 0 END), 0) as success_units,
+    COALESCE(SUM(CASE WHEN (CURRENT_DATE - b.transaction_date) > 14 THEN b.quantity ELSE 0 END), 0) as stagnant_units,
+    COALESCE(SUM(CASE WHEN (CURRENT_DATE - b.transaction_date) > 21 THEN public.calculate_batch_accrual(b.id) ELSE 0 END), 0) as pending_charges,
+    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as accrued_rental
 FROM public.branches br
-LEFT JOIN public.locations s ON s.branch_id = br.id
+LEFT JOIN public.vw_all_sources s ON s.branch_id = br.id
 LEFT JOIN public.batches b ON b.current_location_id = s.id
 GROUP BY br.id, br.name;
 
+DROP VIEW IF EXISTS public.vw_batch_forensics CASCADE;
 CREATE OR REPLACE VIEW public.vw_batch_forensics AS
 SELECT 
     bm.transaction_date as date,
     COALESCE(bm.condition, 'unknown') as type,
     bm.batch_id,
-    s_from.name as from_location,
-    s_to.name as to_location,
-    d.full_name as driver_name,
     bm.quantity,
-    br.name as branch_name,
+    COALESCE(s_from.name, 'Initial Intake') as from_location,
+    s_to.name as to_location,
+    s_to.branch_id,
+    b.name as branch_name,
     bm.timestamp
 FROM public.batch_movements bm
+JOIN public.batches bt ON bm.batch_id = bt.id
 LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
-LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
-LEFT JOIN public.drivers d ON bm.driver_id = d.id
-LEFT JOIN public.branches br ON s_to.branch_id = br.id
+JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.branches b ON s_to.branch_id = b.id
 ORDER BY bm.timestamp DESC;
 
 -- Module 2: Crates & Pallets Management Views
+DROP VIEW IF EXISTS public.vw_asset_intelligence CASCADE;
 CREATE OR REPLACE VIEW public.vw_asset_intelligence AS
 SELECT 
-    b.id as asset_code,
-    am.type as asset_type,
-    am.ownership_type as ownership,
-    b.status,
-    'Good' as condition, 
-    COALESCE(s.name, 'Unknown') as customer,
-    am.billing_model as charge_type,
-    public.calculate_batch_accrual(b.id) as accrued
-FROM public.batches b
-JOIN public.asset_master am ON b.asset_id = am.id
-LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+    a.name as asset_name,
+    a.type as asset_type,
+    COALESCE(SUM(b.quantity), 0) as total_quantity,
+    COUNT(DISTINCT b.id) as batch_count,
+    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as total_accrued_liability
+FROM public.asset_master a
+LEFT JOIN public.batches b ON a.id = b.asset_id
+GROUP BY a.id, a.name, a.type;
 
 -- Relax foreign key on batches to allow business party IDs
 ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS batches_current_location_id_fkey;
 
+DROP VIEW IF EXISTS public.vw_global_inventory_tracker CASCADE;
 CREATE OR REPLACE VIEW public.vw_global_inventory_tracker AS
 SELECT 
-    b.id AS batch_id,
-    b.asset_id,
-    a.name AS asset_name,
+    b.id as batch_id,
+    a.id as asset_id,
+    a.name as asset_name,
     b.quantity,
     b.current_location_id,
-    s.name AS current_location,
+    s.name as location_name,
     s.branch_id,
-    br.name AS branch_name,
-    b.status AS batch_status,
+    b.status as batch_status,
     b.transaction_date,
-    public.calculate_batch_accrual(b.id) AS daily_accrued_liability,
-    (CURRENT_DATE - b.transaction_date) AS days_in_circulation
+    public.calculate_batch_accrual(b.id) as daily_accrued_liability,
+    (CURRENT_DATE - b.transaction_date) as days_in_circulation
 FROM public.batches b
-LEFT JOIN public.asset_master a ON b.asset_id = a.id
-LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id
-LEFT JOIN public.branches br ON s.branch_id = br.id;
+JOIN public.asset_master a ON b.asset_id = a.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 CREATE OR REPLACE FUNCTION approve_reconciliation(p_stock_take_id UUID, p_approved_by UUID)
 RETURNS VOID AS $$
@@ -1242,8 +1232,8 @@ WITH branch_metrics AS (
         (
             SELECT COALESCE(SUM(al.lost_quantity), 0)
             FROM public.asset_losses al
-            JOIN public.vw_all_sources s ON al.last_known_location_id = s.id
-            WHERE s.branch_id = b.id
+            JOIN public.vw_all_sources s_loss ON al.last_known_location_id = s_loss.id
+            WHERE s_loss.branch_id = b.id
         ) as lost_units
     FROM public.branches b
     LEFT JOIN public.vw_all_sources s ON b.id = s.branch_id
@@ -1258,14 +1248,13 @@ forensics AS (
         d.full_name as driver_name,
         s.name as last_location,
         bt.id as batch_id,
-        bt.transaction_date
+        bt.transaction_date as oldest_date
     FROM public.batches bt
     JOIN public.vw_all_sources s ON bt.current_location_id = s.id
     LEFT JOIN public.batch_movements bm ON bt.id = bm.batch_id
     LEFT JOIN public.drivers d ON bm.driver_id = d.id
-    WHERE (CURRENT_DATE - bt.transaction_date) > 14 
-      AND bt.transfer_confirmed_by_customer = false
-    ORDER BY s.branch_id, bt.transaction_date ASC, bm.timestamp DESC
+    WHERE (CURRENT_DATE - bt.transaction_date) > 21
+    ORDER BY s.branch_id, bt.transaction_date ASC
 )
 SELECT 
     m.branch_id,
@@ -1277,7 +1266,7 @@ SELECT
     CASE WHEN (m.total_units + m.lost_units) > 0 THEN (m.lost_units::float / (m.total_units + m.lost_units)) * 100 ELSE 0 END as loss_ratio,
     f.driver_name as oldest_stagnant_driver,
     f.last_location as oldest_stagnant_location,
-    f.batch_id as oldest_stagnant_batch_id
+    f.batch_id as oldest_stagnant_batch
 FROM branch_metrics m
 LEFT JOIN forensics f ON m.branch_id = f.branch_id;
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Truck, Package, AlertTriangle, TrendingUp, ShieldAlert, User as UserIcon, UserCheck, Loader2, Zap, Activity } from 'lucide-react';
+import { Truck, Package, AlertTriangle, TrendingUp, ShieldAlert, User as UserIcon, UserCheck, Loader2, Zap, Activity, CheckCircle, Clock, DollarSign } from 'lucide-react';
 import { User as UserType, DashboardStats, BatchForensics } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { MOCK_BATCHES, MOCK_LOCATIONS } from '../constants';
@@ -23,19 +23,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
       if (!isSupabaseConfigured) {
         // Mock data fallback
         const mockStats: DashboardStats = {
-          available: 1250,
-          at_customers: 840,
-          in_transit: 320,
-          maintenance: 45,
-          total_fleet: 2455,
-          lost_missing: 12,
-          damaged: 8,
+          total_units: 2455,
+          pending_units: 320,
+          success_units: 1250,
+          stagnant_units: 45,
           pending_charges: 15420.50,
-          open_loss_cases: 3,
           accrued_rental: 42500.00,
-          settlement_liability: 125000.00,
-          active_customers: 15,
-          movements_today: 24
+          branch_name: branchContext
         };
         setStats(mockStats);
         
@@ -45,8 +39,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
           batch_id: b.id,
           from_location: 'Main Warehouse',
           to_location: MOCK_LOCATIONS.find(l => l.id === b.current_location_id)?.name || 'Unknown',
-          driver_name: 'John Doe',
-          quantity: b.quantity
+          branch_name: branchContext,
+          quantity: b.quantity,
+          timestamp: new Date().toISOString()
         }));
         setRecentActivity(mockActivity);
         setIsLoading(false);
@@ -79,39 +74,42 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
         if (branchContext === 'Consolidated' && Array.isArray(statsRes.data)) {
           const consolidated = statsRes.data.reduce((acc, curr) => ({
-            available: (acc.available || 0) + (curr.available || 0),
-            at_customers: (acc.at_customers || 0) + (curr.at_customers || 0),
-            in_transit: (acc.in_transit || 0) + (curr.in_transit || 0),
-            maintenance: (acc.maintenance || 0) + (curr.maintenance || 0),
-            total_fleet: (acc.total_fleet || 0) + (curr.total_fleet || 0),
-            lost_missing: (acc.lost_missing || 0) + (curr.lost_missing || 0),
-            damaged: (acc.damaged || 0) + (curr.damaged || 0),
+            total_units: (acc.total_units || 0) + (curr.total_units || 0),
+            pending_units: (acc.pending_units || 0) + (curr.pending_units || 0),
+            success_units: (acc.success_units || 0) + (curr.success_units || 0),
+            stagnant_units: (acc.stagnant_units || 0) + (curr.stagnant_units || 0),
             pending_charges: (acc.pending_charges || 0) + (curr.pending_charges || 0),
-            open_loss_cases: (acc.open_loss_cases || 0) + (curr.open_loss_cases || 0),
             accrued_rental: (acc.accrued_rental || 0) + (curr.accrued_rental || 0),
-            settlement_liability: (acc.settlement_liability || 0) + (curr.settlement_liability || 0),
-            active_customers: (acc.active_customers || 0) + (curr.active_customers || 0),
-            movements_today: (acc.movements_today || 0) + (curr.movements_today || 0)
+            branch_name: 'Consolidated'
           }), {} as DashboardStats);
           setStats(consolidated);
         } else {
           setStats(statsRes.data || {
-            available: 0,
-            at_customers: 0,
-            in_transit: 0,
-            maintenance: 0,
-            total_fleet: 0,
-            lost_missing: 0,
-            damaged: 0,
+            total_units: 0,
+            pending_units: 0,
+            success_units: 0,
+            stagnant_units: 0,
             pending_charges: 0,
-            open_loss_cases: 0,
             accrued_rental: 0,
-            settlement_liability: 0,
-            active_customers: 0,
-            movements_today: 0
+            branch_name: branchContext || 'N/A'
           });
         }
-        setRecentActivity(activityRes.data || []);
+
+        if (activityRes.data) {
+          const mappedActivity = activityRes.data.map((item: any) => ({
+            date: item.date || item.transaction_date || item.timestamp,
+            type: item.type || item.condition || 'unknown',
+            batch_id: item.batch_id || item.batchId || 'N/A',
+            quantity: item.quantity,
+            from_location: item.from_location || 'N/A',
+            to_location: item.to_location || 'N/A',
+            branch_name: item.branch_name || 'N/A',
+            timestamp: item.timestamp || new Date().toISOString()
+          }));
+          setRecentActivity(mappedActivity);
+        } else {
+          setRecentActivity([]);
+        }
       } catch (err) {
         console.error("Dashboard Fetch Error:", err);
       } finally {
@@ -175,28 +173,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
       </div>
 
       {/* Top Row: Fleet Status */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <DashboardCard label="Available" value={isNaN(Number(displayStats.available)) ? 0 : Number(displayStats.available)} icon={<Package className="text-emerald-400" />} />
-        <DashboardCard label="At Customers" value={isNaN(Number(displayStats.at_customers)) ? 0 : Number(displayStats.at_customers)} icon={<UserIcon className="text-blue-400" />} />
-        <DashboardCard label="In Transit" value={isNaN(Number(displayStats.in_transit)) ? 0 : Number(displayStats.in_transit)} icon={<Truck className="text-amber-400" />} />
-        <DashboardCard label="Maintenance" value={isNaN(Number(displayStats.maintenance)) ? 0 : Number(displayStats.maintenance)} icon={<AlertTriangle className="text-rose-400" />} />
-        <DashboardCard label="Total Fleet" value={isNaN(Number(displayStats.total_fleet)) ? 0 : Number(displayStats.total_fleet)} icon={<Activity className="text-slate-400" />} />
-      </div>
-
-      {/* Middle Row: Financial Alerts */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <AlertCard label="Lost / Missing" value={displayStats.lost_missing || 0} color="rose" />
-        <AlertCard label="Damaged" value={displayStats.damaged || 0} color="rose" />
-        <AlertCard label="Pending Charges" value={formatCurrency(displayStats.pending_charges)} color="amber" />
-        <AlertCard label="Open Loss Cases" value={displayStats.open_loss_cases || 0} color="amber" />
-      </div>
-
-      {/* Bottom Row: Liability */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <DashboardCard label="Total Units" value={displayStats.total_units || 0} icon={<Package className="text-blue-400" />} />
+        <DashboardCard label="Pending" value={displayStats.pending_units || 0} icon={<Clock className="text-amber-400" />} />
+        <DashboardCard label="Success" value={displayStats.success_units || 0} icon={<CheckCircle className="text-emerald-400" />} />
+        <DashboardCard label="Stagnant" value={displayStats.stagnant_units || 0} icon={<AlertTriangle className="text-rose-400" />} />
+        <DashboardCard label="Pending Charges" value={formatCurrency(displayStats.pending_charges)} icon={<DollarSign className="text-rose-400" />} />
         <DashboardCard label="Accrued Rental" value={formatCurrency(displayStats.accrued_rental)} icon={<TrendingUp className="text-emerald-400" />} />
-        <DashboardCard label="Settlement Liability" value={formatCurrency(displayStats.settlement_liability)} icon={<ShieldAlert className="text-blue-400" />} />
-        <DashboardCard label="Active Customers" value={displayStats.active_customers || 0} icon={<UserCheck className="text-indigo-400" />} />
-        <DashboardCard label="Movements Today" value={displayStats.movements_today || 0} icon={<Zap className="text-amber-400" />} />
       </div>
 
       {/* Recent Activity Table */}
@@ -222,7 +205,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
                 <th className="px-6 py-4">Batch</th>
                 <th className="px-6 py-4">From</th>
                 <th className="px-6 py-4">To</th>
-                <th className="px-6 py-4">Driver</th>
+                <th className="px-6 py-4">Branch</th>
                 <th className="px-6 py-4 text-right">Quantity</th>
               </tr>
             </thead>
@@ -230,17 +213,17 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
               {recentActivity.map((activity, i) => (
                 <tr key={i} className="hover:bg-slate-800/30 transition-colors group">
                   <td className="px-6 py-4 text-xs font-bold text-slate-300">
-                    {(activity.date || (activity as any).transaction_date) ? new Date(activity.date || (activity as any).transaction_date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                    {activity.date ? new Date(activity.date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
                   </td>
                   <td className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">
-                    {activity.type || (activity as any).condition || 'unknown'}
+                    {activity.type}
                   </td>
                   <td className="px-6 py-4 text-xs font-bold text-emerald-500">
                     {activity.batch_id}
                   </td>
-                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.from_location || (activity as any).from_location_name || 'N/A'}</td>
-                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.to_location || (activity as any).to_location_name || 'N/A'}</td>
-                  <td className="px-6 py-4 text-xs text-slate-400">{activity.driver_name || 'N/A'}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.from_location}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{activity.to_location}</td>
+                  <td className="px-6 py-4 text-xs text-slate-400">{activity.branch_name}</td>
                   <td className="px-6 py-4 text-xs font-black text-emerald-400 text-right tabular-nums">{activity.quantity || 0}</td>
                 </tr>
               ))}
