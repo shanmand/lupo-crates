@@ -9,7 +9,7 @@ interface StockTakeModuleProps {
 }
 
 const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser }) => {
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [sources, setSources] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string>('');
@@ -31,12 +31,12 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser }) => {
     }
     setIsLoading(true);
     try {
-      const [locRes, histRes] = await Promise.all([
-        supabase.from('locations').select('*').eq('partner_type', 'Internal'),
+      const [sourceRes, histRes] = await Promise.all([
+        supabase.from('vw_all_sources').select('*'),
         supabase.from('vw_stock_take_history').select('*').order('take_date', { ascending: false })
       ]);
 
-      if (locRes.data) setLocations(locRes.data);
+      if (sourceRes.data) setSources(sourceRes.data);
       if (histRes.data) setHistory(histRes.data);
     } catch (error) {
       console.error('Error fetching stock take data:', error);
@@ -182,8 +182,8 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser }) => {
                 value={selectedLocation}
                 onChange={e => setSelectedLocation(e.target.value)}
               >
-                <option value="">Select Location...</option>
-                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                <option value="">Select Audit Node...</option>
+                {sources.map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)}
               </select>
             </div>
           </div>

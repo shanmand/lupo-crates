@@ -103,11 +103,22 @@ CREATE TABLE public.fee_schedule (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE public.business_parties (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    party_type TEXT NOT NULL, -- Customer, Supplier, Transporter
+    contact_person TEXT,
+    email TEXT,
+    phone TEXT,
+    address TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE public.batches (
     id TEXT PRIMARY KEY,
     asset_id TEXT REFERENCES public.asset_master(id),
     quantity INTEGER NOT NULL CHECK (quantity >= 0),
-    current_location_id TEXT REFERENCES public.locations(id),
+    current_location_id TEXT, -- Can be from locations or business_parties
     status TEXT DEFAULT 'Success', -- Success, Lost, In-Transit, Retired
     transaction_date DATE DEFAULT CURRENT_DATE,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -116,8 +127,8 @@ CREATE TABLE public.batches (
 CREATE TABLE public.batch_movements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     batch_id TEXT REFERENCES public.batches(id),
-    from_location_id TEXT REFERENCES public.locations(id),
-    to_location_id TEXT REFERENCES public.locations(id),
+    from_location_id TEXT, -- Can be from locations or business_parties
+    to_location_id TEXT, -- Can be from locations or business_parties
     truck_id TEXT,
     driver_id TEXT,
     origin_user_id UUID,
@@ -130,7 +141,7 @@ CREATE TABLE public.batch_movements (
 
 CREATE TABLE public.stock_takes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    location_id TEXT REFERENCES public.locations(id),
+    location_id TEXT, -- Can be from locations or business_parties
     take_date DATE NOT NULL,
     performed_by UUID,
     counter_name TEXT,
@@ -156,7 +167,7 @@ CREATE TABLE public.asset_losses (
     batch_id TEXT REFERENCES public.batches(id),
     loss_type TEXT NOT NULL, -- Missing, Damaged, Theft
     lost_quantity INTEGER NOT NULL,
-    location_id TEXT REFERENCES public.locations(id),
+    location_id TEXT, -- Can be from locations or business_parties
     reported_by UUID,
     notes TEXT,
     transaction_date DATE DEFAULT CURRENT_DATE,
@@ -310,38 +321,49 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 5. VIEWS
 
+-- ALL SOURCES (FOR SELECTORS)
+CREATE OR REPLACE VIEW public.vw_all_sources AS
+SELECT 
+    id,
+    name,
+    partner_type,
+    branch_id,
+    type,
+    category,
+    address,
+    name || ' (' || partner_type || ')' as display_name,
+    'Location' as source_table
+FROM public.locations
+UNION ALL
+SELECT 
+    id,
+    name,
+    party_type as partner_type,
+    NULL as branch_id,
+    party_type as type,
+    'External' as category,
+    address,
+    name || ' (' || party_type || ')' as display_name,
+    'BusinessParty' as source_table
+FROM public.business_parties;
+
 -- INVENTORY SUMMARY
 CREATE OR REPLACE VIEW public.vw_inventory_summary AS
 SELECT 
-    l.id as location_id,
-    l.name as location_name,
-    l.type as location_type,
-    l.branch_id,
+    s.id as location_id,
+    s.name as location_name,
+    s.type as location_type,
+    s.branch_id,
     b.asset_id,
     am.name as asset_name,
     am.type as asset_type,
     SUM(b.quantity) as total_quantity,
     COUNT(b.id) as batch_count
-FROM public.locations l
-JOIN public.batches b ON l.id = b.current_location_id
+FROM public.vw_all_sources s
+JOIN public.batches b ON s.id = b.current_location_id
 JOIN public.asset_master am ON b.asset_id = am.id
 WHERE b.status = 'Success' AND b.quantity > 0
-GROUP BY l.id, l.name, l.type, l.branch_id, b.asset_id, am.name, am.type;
-
--- INVENTORY MAP DATA
-CREATE OR REPLACE VIEW public.vw_inventory_map_data AS
-SELECT 
-    l.id,
-    l.name,
-    l.type,
-    l.latitude,
-    l.longitude,
-    l.branch_id,
-    COALESCE(SUM(b.quantity), 0) as total_assets,
-    COUNT(DISTINCT b.asset_id) as asset_types
-FROM public.locations l
-LEFT JOIN public.batches b ON l.id = b.current_location_id AND b.status = 'Success'
-GROUP BY l.id, l.name, l.type, l.latitude, l.longitude, l.branch_id;
+GROUP BY s.id, s.name, s.type, s.branch_id, b.asset_id, am.name, am.type;
 
 -- ASSET REGISTRY
 CREATE OR REPLACE VIEW public.vw_asset_registry AS
@@ -353,20 +375,20 @@ SELECT
     am.ownership_type,
     b.quantity,
     b.current_location_id,
-    l.name as location_name,
+    s.name as location_name,
     b.status,
     b.transaction_date,
     b.created_at
 FROM public.batches b
 JOIN public.asset_master am ON b.asset_id = am.id
-LEFT JOIN public.locations l ON b.current_location_id = l.id;
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 
 -- STOCK TAKE HISTORY
 CREATE OR REPLACE VIEW public.vw_stock_take_history AS
 SELECT 
     st.id,
     st.location_id,
-    l.name as location_name,
+    s.name as location_name,
     st.take_date,
     st.counter_name,
     st.status,
@@ -374,9 +396,9 @@ SELECT
     COUNT(sti.id) as item_count,
     SUM(ABS(sti.variance)) as total_variance
 FROM public.stock_takes st
-JOIN public.locations l ON st.location_id = l.id
+JOIN public.vw_all_sources s ON st.location_id = s.id
 LEFT JOIN public.stock_take_items sti ON st.id = sti.stock_take_id
-GROUP BY st.id, st.location_id, l.name, st.take_date, st.counter_name, st.status, st.notes;
+GROUP BY st.id, st.location_id, s.name, st.take_date, st.counter_name, st.status, st.notes;
 
 -- LOSS REPORT
 CREATE OR REPLACE VIEW public.vw_loss_report AS
@@ -387,32 +409,25 @@ SELECT
     al.loss_type,
     al.lost_quantity,
     al.location_id,
-    l.name as location_name,
+    s.name as location_name,
     al.notes,
     al.transaction_date,
     al.timestamp
 FROM public.asset_losses al
 JOIN public.batches b ON al.batch_id = b.id
 JOIN public.asset_master am ON b.asset_id = am.id
-LEFT JOIN public.locations l ON al.location_id = l.id;
-
--- ALL SOURCES (FOR SELECTORS)
-CREATE OR REPLACE VIEW public.vw_all_sources AS
-SELECT 
-    id,
-    name,
-    partner_type,
-    branch_id,
-    type,
-    category,
-    address,
-    name || ' (' || partner_type || ')' as display_name
-FROM public.locations;
+LEFT JOIN public.vw_all_sources s ON al.location_id = s.id;
 
 -- 6. SEED DATA
 INSERT INTO public.branches (id, name) VALUES 
 ('BR-01', 'Kya Sands'), 
 ('BR-02', 'Durban') 
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.business_parties (id, name, party_type, address) VALUES
+('BP-CUST-001', 'Shoprite Group', 'Customer', 'Cape Town HQ'),
+('BP-CUST-002', 'Pick n Pay', 'Customer', 'Johannesburg HQ'),
+('BP-SUP-001', 'Crate Manufacturers Ltd', 'Supplier', 'Pretoria Industrial')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.locations (id, name, type, category, branch_id, partner_type, latitude, longitude) VALUES 

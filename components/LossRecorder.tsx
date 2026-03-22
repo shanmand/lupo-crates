@@ -11,7 +11,7 @@ interface LossRecorderProps {
 const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
   const [losses, setLosses] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [sources, setSources] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showLossModal, setShowLossModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,15 +33,15 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     }
     setIsLoading(true);
     try {
-      const [lossRes, batchRes, locRes] = await Promise.all([
+      const [lossRes, batchRes, sourceRes] = await Promise.all([
         supabase.from('vw_loss_report').select('*').order('timestamp', { ascending: false }),
         supabase.from('batches').select('*, asset:asset_master(name)').eq('status', 'Success').gt('quantity', 0),
-        supabase.from('locations').select('*')
+        supabase.from('vw_all_sources').select('*')
       ]);
 
       if (lossRes.data) setLosses(lossRes.data);
       if (batchRes.data) setBatches(batchRes.data);
-      if (locRes.data) setLocations(locRes.data);
+      if (sourceRes.data) setSources(sourceRes.data);
     } catch (error) {
       console.error('Error fetching loss data:', error);
     } finally {
@@ -243,15 +243,15 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Incident Location</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Incident Location / Party</label>
                 <select 
                   required
                   className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-rose-500"
                   value={lossForm.location_id}
                   onChange={e => setLossForm({...lossForm, location_id: e.target.value})}
                 >
-                  <option value="">Select Location...</option>
-                  {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  <option value="">Select Node...</option>
+                  {sources.map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)}
                 </select>
               </div>
 

@@ -11,7 +11,7 @@ interface InventoryDashboardProps {
 const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) => {
   const [inventory, setInventory] = useState<any[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [sources, setSources] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,15 +33,15 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
     }
     setIsLoading(true);
     try {
-      const [invRes, assetRes, locRes] = await Promise.all([
+      const [invRes, assetRes, sourceRes] = await Promise.all([
         supabase.from('vw_inventory_summary').select('*'),
         supabase.from('asset_master').select('*'),
-        supabase.from('locations').select('*').eq('partner_type', 'Internal')
+        supabase.from('vw_all_sources').select('*')
       ]);
 
       if (invRes.data) setInventory(invRes.data);
       if (assetRes.data) setAssets(assetRes.data);
-      if (locRes.data) setLocations(locRes.data);
+      if (sourceRes.data) setSources(sourceRes.data);
     } catch (error) {
       console.error('Error fetching inventory data:', error);
     } finally {
@@ -235,15 +235,15 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location / Business Party</label>
                   <select 
                     required
                     className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900"
                     value={intakeForm.location_id}
                     onChange={e => setIntakeForm({...intakeForm, location_id: e.target.value})}
                   >
-                    <option value="">Select Location...</option>
-                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    <option value="">Select Source...</option>
+                    {sources.map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)}
                   </select>
                 </div>
               </div>
