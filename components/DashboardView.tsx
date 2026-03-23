@@ -141,19 +141,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
   }
 
   const displayStats = stats || {
-    available: 0,
-    at_customers: 0,
-    in_transit: 0,
-    maintenance: 0,
-    total_fleet: 0,
-    lost_missing: 0,
-    damaged: 0,
+    total_units: 0,
+    pending_units: 0,
+    success_units: 0,
+    stagnant_units: 0,
     pending_charges: 0,
-    open_loss_cases: 0,
     accrued_rental: 0,
-    settlement_liability: 0,
-    active_customers: 0,
-    movements_today: 0
+    branch_name: branchContext
   };
 
   return (
@@ -178,8 +172,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         <DashboardCard label="Pending" value={displayStats.pending_units || 0} icon={<Clock className="text-amber-400" />} />
         <DashboardCard label="Success" value={displayStats.success_units || 0} icon={<CheckCircle className="text-emerald-400" />} />
         <DashboardCard label="Stagnant" value={displayStats.stagnant_units || 0} icon={<AlertTriangle className="text-rose-400" />} />
-        <DashboardCard label="Pending Charges" value={formatCurrency(displayStats.pending_charges)} icon={<DollarSign className="text-rose-400" />} />
-        <DashboardCard label="Accrued Rental" value={formatCurrency(displayStats.accrued_rental)} icon={<TrendingUp className="text-emerald-400" />} />
+        <DashboardCard label="Pending Charges" value={formatCurrency(displayStats.pending_charges || 0)} icon={<DollarSign className="text-rose-400" />} />
+        <DashboardCard label="Accrued Rental" value={formatCurrency(displayStats.accrued_rental || 0)} icon={<TrendingUp className="text-emerald-400" />} />
       </div>
 
       {/* Recent Activity Table */}

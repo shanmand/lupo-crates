@@ -127,17 +127,22 @@ const ReportsView: React.FC = () => {
   }, []);
 
   const filteredData = useMemo(() => {
+    const locationMap = new Map<string, Location>(locations.map(l => [l.id, l]));
+    const assetMap = new Map<string, AssetMaster>(assets.map(a => [a.id, a]));
+
     return batches.filter(batch => {
-      const loc = locations.find(l => l.id === batch.current_location_id);
-      const asset = assets.find(a => a.id === batch.asset_id);
+      const loc = locationMap.get(batch.current_location_id);
+      const asset = assetMap.get(batch.asset_id);
       const assetName = asset?.name || batch.asset_name || 'Unknown Asset';
       
       const matchesBranch = selectedBranch === 'all' || loc?.branch_id === selectedBranch;
       const matchesPartner = selectedPartnerType === 'all' || loc?.partner_type === selectedPartnerType;
       const matchesAsset = selectedAssetType === 'all' || batch.asset_id === selectedAssetType;
-      const matchesSearch = batch.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           assetName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           loc?.name.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = (batch.id || '').toLowerCase().includes(searchLower) || 
+                           (assetName || '').toLowerCase().includes(searchLower) ||
+                           (loc?.name || '').toLowerCase().includes(searchLower);
 
       // "Our Account" Logic: External Assets at External Locations are removed from our account
       const isOurAccount = !(asset?.ownership_type === 'External' && loc?.category === 'External');
@@ -155,27 +160,34 @@ const ReportsView: React.FC = () => {
     tripsByDriver: Record<string, Trip[]>;
     tripsByLocation: Record<string, (Trip & { stopStatus: string })[]>;
   }>(() => {
+    const locationMap = new Map<string, Location>(locations.map(l => [l.id, l]));
+    const assetMap = new Map<string, AssetMaster>(assets.map(a => [a.id, a]));
+    const driverMap = new Map<string, Driver>(drivers.map(d => [d.id, d]));
+    const truckMap = new Map<string, TruckType>(trucks.map(t => [t.id, t]));
+    const tripMap = new Map<string, Trip>(trips.map(t => [t.id, t]));
+
     const totalUnits = filteredData.reduce((acc, b) => acc + b.quantity, 0);
     const byLocation = filteredData.reduce<Record<string, number>>((acc, b) => {
-      const loc = locations.find(l => l.id === b.current_location_id)?.name || 'Unknown';
+      const loc = locationMap.get(b.current_location_id)?.name || 'Unknown';
       acc[loc] = (acc[loc] || 0) + b.quantity;
       return acc;
     }, {});
 
     const byAsset = filteredData.reduce<Record<string, number>>((acc, b) => {
-      const asset = assets.find(a => a.id === b.asset_id)?.name || 'Unknown';
+      const asset = assetMap.get(b.asset_id)?.name || 'Unknown';
       acc[asset] = (acc[asset] || 0) + b.quantity;
       return acc;
     }, {});
 
     // Trace Stats
+    const searchLower = searchQuery.toLowerCase();
     const traceData = traces.filter(t => {
       const matchesBranch = selectedBranch === 'all' || t.custodian_branch_id === selectedBranch;
       const matchesSearch = !searchQuery || 
-                           String(t.batch_id).toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           t.driver_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           t.to_location_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           t.truck_plate?.toLowerCase().includes(searchQuery.toLowerCase());
+                           String(t.batch_id || '').toLowerCase().includes(searchLower) || 
+                           (t.driver_name || '').toLowerCase().includes(searchLower) ||
+                           (t.to_location_name || '').toLowerCase().includes(searchLower) ||
+                           (t.truck_plate || '').toLowerCase().includes(searchLower);
       return matchesBranch && matchesSearch;
     });
     
@@ -183,7 +195,8 @@ const ReportsView: React.FC = () => {
     const latestTraceByBatch: Record<string, LogisticsTrace> = {};
     for (const t of traceData) {
       const bId = String(t.batch_id);
-      if (!latestTraceByBatch[bId] || new Date(t.timestamp).getTime() > new Date(latestTraceByBatch[bId].timestamp).getTime()) {
+      const currentLatest = latestTraceByBatch[bId];
+      if (!currentLatest || new Date(t.timestamp).getTime() > new Date(currentLatest.timestamp).getTime()) {
         latestTraceByBatch[bId] = t;
       }
     }
@@ -202,24 +215,29 @@ const ReportsView: React.FC = () => {
     const filteredTrips = trips.filter(trip => {
       const tripDate = trip.scheduled_date || '';
       const inRange = tripDate >= startDate && tripDate <= endDate;
-      const matchesDriver = searchQuery === '' || drivers.find(d => d.id === trip.driver_id)?.full_name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesTruck = searchQuery === '' || trucks.find(t => t.id === trip.truck_id)?.plate_number.toLowerCase().includes(searchQuery.toLowerCase());
+      const driver = driverMap.get(trip.driver_id);
+      const truck = truckMap.get(trip.truck_id);
+      const matchesDriver = searchQuery === '' || (driver?.full_name || '').toLowerCase().includes(searchLower);
+      const matchesTruck = searchQuery === '' || (truck?.plate_number || '').toLowerCase().includes(searchLower);
       return inRange && (matchesDriver || matchesTruck);
     });
 
     const tripsByDriver = filteredTrips.reduce<Record<string, Trip[]>>((acc, trip) => {
-      const driverName = drivers.find(d => d.id === trip.driver_id)?.full_name || 'Unknown Driver';
+      const driverName = driverMap.get(trip.driver_id)?.full_name || 'Unknown Driver';
       if (!acc[driverName]) acc[driverName] = [];
       acc[driverName].push(trip);
       return acc;
     }, {});
 
+    const filteredTripIds = new Set(filteredTrips.map(t => t.id));
     const tripsByLocation = tripStops.reduce<Record<string, (Trip & { stopStatus: string })[]>>((acc, stop) => {
-      const trip = filteredTrips.find(t => t.id === stop.trip_id);
-      if (trip) {
-        const locName = locations.find(l => l.id === stop.location_id)?.name || 'Unknown Location';
-        if (!acc[locName]) acc[locName] = [];
-        acc[locName].push({ ...trip, stopStatus: stop.status });
+      if (filteredTripIds.has(stop.trip_id)) {
+        const trip = tripMap.get(stop.trip_id);
+        if (trip) {
+          const locName = locationMap.get(stop.location_id)?.name || 'Unknown Location';
+          if (!acc[locName]) acc[locName] = [];
+          acc[locName].push({ ...trip, stopStatus: stop.status });
+        }
       }
       return acc;
     }, {});
@@ -578,12 +596,12 @@ const ReportsView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredData.slice(0, 50).map(batch => {
+                  {filteredData.slice(0, 50).map((batch, idx) => {
                     const loc = locations.find(l => l.id === batch.current_location_id);
                     const asset = assets.find(a => a.id === batch.asset_id);
                     const assetName = asset?.name || batch.asset_name || 'Unknown Asset';
                     return (
-                      <tr key={batch.id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={batch.id || `batch-${idx}`} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 text-xs font-black text-slate-900">{batch.id}</td>
                         <td className="px-6 py-4">
                           <p className="text-xs font-bold text-slate-700">{assetName}</p>
@@ -593,12 +611,12 @@ const ReportsView: React.FC = () => {
                           <p className="text-xs font-bold text-slate-700">{loc?.name}</p>
                           <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{loc?.partner_type}</p>
                         </td>
-                        <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{batch.quantity.toLocaleString()}</td>
+                        <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{(batch.quantity || 0).toLocaleString()}</td>
                       </tr>
                     );
                   })}
                   {filteredData.length === 0 && (
-                    <tr>
+                    <tr key="empty-inventory">
                       <td colSpan={4} className="py-20 text-center text-slate-400 italic text-sm">No inventory records match your criteria.</td>
                     </tr>
                   )}
@@ -633,7 +651,7 @@ const ReportsView: React.FC = () => {
                 {Object.entries(stats.conditionSummary).map(([locName, counts]) => {
                   const c = counts as { clean: number, dirty: number, damaged: number };
                   return (
-                    <tr key={locName} className="hover:bg-slate-50 transition-colors">
+                    <tr key={`trace-${locName}`} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 text-xs font-bold text-slate-900">{locName}</td>
                       <td className="px-6 py-4 text-center">
                         <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black">{c.clean.toLocaleString()}</span>
@@ -651,7 +669,7 @@ const ReportsView: React.FC = () => {
                   );
                 })}
                 {Object.keys(stats.conditionSummary).length === 0 && (
-                  <tr>
+                  <tr key="empty-trace">
                     <td colSpan={5} className="py-20 text-center text-slate-400 italic text-sm">No trace data found for this branch.</td>
                   </tr>
                 )}
@@ -681,11 +699,11 @@ const ReportsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {stats.filteredTrips.map(trip => {
+                {stats.filteredTrips.map((trip, idx) => {
                   const driver = drivers.find(d => d.id === trip.driver_id);
                   const truck = trucks.find(t => t.id === trip.truck_id);
                   return (
-                    <tr key={trip.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={trip.id || `trip-${idx}`} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 text-xs font-black text-slate-900">{trip.id}</td>
                       <td className="px-6 py-4 text-xs font-bold text-slate-700">{trip.scheduled_date}</td>
                       <td className="px-6 py-4 text-xs font-bold text-slate-700">{driver?.full_name}</td>
@@ -705,7 +723,7 @@ const ReportsView: React.FC = () => {
                   );
                 })}
                 {stats.filteredTrips.length === 0 && (
-                  <tr>
+                  <tr key="empty-trips">
                     <td colSpan={6} className="py-20 text-center text-slate-400 italic text-sm">No trips found for the selected period.</td>
                   </tr>
                 )}

@@ -39,11 +39,17 @@ const BusinessDirectory: React.FC = () => {
     setIsLoading(true);
     try {
       if (isSupabaseConfigured) {
+        console.log("Fetching business directory data...");
         const { data, error } = await supabase
           .from('vw_business_directory')
           .select('*');
         
-        if (error) throw error;
+        if (error) {
+          console.error("Supabase error fetching directory:", error);
+          throw error;
+        }
+        
+        console.log(`Fetched ${data?.length || 0} partners`);
         if (data) setPartners(data);
       } else {
         // Mock data for development
@@ -55,6 +61,7 @@ const BusinessDirectory: React.FC = () => {
       }
     } catch (err) {
       console.error("Fetch Partners Error:", err);
+      setError("Failed to load business directory. Please check your connection.");
     } finally {
       setIsLoading(false);
     }
@@ -71,11 +78,36 @@ const BusinessDirectory: React.FC = () => {
 
     try {
       if (isSupabaseConfigured) {
+        // 1. Add to business_parties
         const { error: insertError } = await supabase
           .from('business_parties')
-          .insert([newPartner]);
+          .insert([{
+            id: newPartner.id,
+            name: newPartner.name,
+            party_type: newPartner.party_type,
+            address: newPartner.address
+          }]);
         
         if (insertError) throw insertError;
+
+        // 2. Also create a location entry for consistency if it's a Supplier or Customer
+        if (['Supplier', 'Customer'].includes(newPartner.party_type)) {
+          const { error: locError } = await supabase
+            .from('locations')
+            .upsert([{
+              id: newPartner.id,
+              name: newPartner.name,
+              type: newPartner.party_type,
+              category: 'External',
+              partner_type: newPartner.party_type,
+              address: newPartner.address
+            }]);
+          
+          if (locError) {
+            console.warn("Partner added but location sync failed:", locError);
+            // We don't throw here as the primary record was saved
+          }
+        }
       }
       
       await fetchData();
@@ -83,7 +115,7 @@ const BusinessDirectory: React.FC = () => {
       setNewPartner({ id: '', name: '', party_type: 'Supplier', address: '' });
     } catch (err: any) {
       console.error("Add Partner Error:", err);
-      setError(err.message || "Failed to add partner.");
+      setError(err.message || "Failed to add partner. Ensure ID is unique.");
     } finally {
       setIsSubmitting(false);
     }
@@ -108,6 +140,20 @@ const BusinessDirectory: React.FC = () => {
           .eq('id', editingPartner.id);
         
         if (updateError) throw updateError;
+
+        // Sync to locations as well
+        if (['Supplier', 'Customer'].includes(editingPartner.party_type)) {
+          await supabase
+            .from('locations')
+            .upsert([{
+              id: editingPartner.id,
+              name: editingPartner.name,
+              type: editingPartner.party_type,
+              category: 'External',
+              partner_type: editingPartner.party_type,
+              address: editingPartner.address
+            }]);
+        }
       }
       
       await fetchData();
@@ -144,8 +190,10 @@ const BusinessDirectory: React.FC = () => {
   };
 
   const filteredPartners = partners.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         p.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchLower = searchTerm.toLowerCase();
+    const nameMatch = (p.name || '').toLowerCase().includes(searchLower);
+    const idMatch = (p.id || '').toLowerCase().includes(searchLower);
+    const matchesSearch = nameMatch || idMatch;
     const matchesType = typeFilter === 'All' || p.party_type === typeFilter;
     return matchesSearch && matchesType;
   });

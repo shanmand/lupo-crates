@@ -140,6 +140,10 @@ CREATE TABLE public.batches (
     current_location_id TEXT, -- Can be from locations or business_parties
     status TEXT DEFAULT 'Success', -- Success, Lost, In-Transit, Retired
     transaction_date DATE DEFAULT CURRENT_DATE,
+    transfer_confirmed_by_customer BOOLEAN DEFAULT FALSE,
+    confirmation_date TIMESTAMPTZ,
+    is_settled BOOLEAN DEFAULT FALSE,
+    settled_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

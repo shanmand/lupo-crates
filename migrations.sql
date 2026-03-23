@@ -424,40 +424,72 @@ CREATE OR REPLACE VIEW public.vw_movement_destinations AS
 SELECT * FROM public.vw_all_sources
 ORDER BY sort_group, name;
 
+-- Add missing columns to batches table
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS transfer_confirmed_by_customer BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS confirmation_date TIMESTAMPTZ;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS is_settled BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS settled_at TIMESTAMPTZ;
+
+-- Helper function for accrual calculations
+CREATE OR REPLACE FUNCTION public.calculate_batch_accrual(batch_id_input TEXT)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_batch_qty INT;
+    v_asset_id TEXT;
+    v_created_at TIMESTAMP;
+    v_daily_rate NUMERIC;
+    v_days INT;
+BEGIN
+    -- Get batch details
+    SELECT quantity, asset_id, created_at 
+    INTO v_batch_qty, v_asset_id, v_created_at
+    FROM public.batches WHERE id = batch_id_input;
+
+    -- Get current daily rental rate
+    SELECT amount_zar INTO v_daily_rate
+    FROM public.fee_schedule 
+    WHERE asset_id = v_asset_id 
+    AND fee_type = 'Daily Rental (Supermarket)'
+    AND effective_to IS NULL
+    LIMIT 1;
+
+    -- Calculate days (minimum 1)
+    v_days := GREATEST(1, EXTRACT(DAY FROM (NOW() - v_created_at))::INT);
+
+    RETURN COALESCE(v_batch_qty * v_daily_rate * v_days, 0);
+END;
+$$ LANGUAGE plpgsql;
+
 -- Module 1: Executive Dashboard Overhaul Views
 CREATE OR REPLACE VIEW public.vw_dashboard_stats AS
 SELECT
-    br.name as branch_name,
+    COALESCE(br.name, 'Global/Unassigned') as branch_name,
+    COALESCE(SUM(b.quantity), 0) as total_units,
+    COALESCE(SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END), 0) as pending_units,
+    COALESCE(SUM(CASE WHEN b.status = 'Success' THEN b.quantity ELSE 0 END), 0) as success_units,
+    COALESCE(SUM(CASE WHEN (CURRENT_DATE - b.transaction_date) > 14 AND b.transfer_confirmed_by_customer = false THEN b.quantity ELSE 0 END), 0) as stagnant_units,
+    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as pending_charges,
+    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as accrued_rental,
+    -- Extra fields for compatibility
     COALESCE(SUM(CASE WHEN s.category = 'Home' AND s.type != 'In Transit' THEN b.quantity ELSE 0 END), 0) as available,
     COALESCE(SUM(CASE WHEN s.partner_type = 'Customer' THEN b.quantity ELSE 0 END), 0) as at_customers,
     COALESCE(SUM(CASE WHEN s.type = 'In Transit' THEN b.quantity ELSE 0 END), 0) as in_transit,
-    COALESCE(SUM(CASE WHEN b.status = 'Maintenance' THEN b.quantity ELSE 0 END), 0) as maintenance,
-    COALESCE(SUM(b.quantity), 0) as total_fleet,
-    -- Financial Alerts
-    COALESCE(SUM(CASE WHEN b.status = 'Lost' THEN b.quantity ELSE 0 END), 0) as lost_missing,
-    COALESCE(SUM(CASE WHEN b.status = 'Damaged' THEN b.quantity ELSE 0 END), 0) as damaged,
-    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as pending_charges,
-    (SELECT COUNT(*) FROM public.asset_losses al JOIN public.locations l ON al.last_known_location_id = l.id WHERE al.is_settled = FALSE AND l.branch_id = br.id) as open_loss_cases,
-    -- Liability
-    COALESCE(SUM(public.calculate_batch_accrual(b.id)), 0) as accrued_rental,
-    (SELECT COALESCE(SUM(net_payable), 0) FROM public.settlements st WHERE st.supplier_id IN (SELECT id FROM public.locations WHERE branch_id = br.id)) as settlement_liability,
-    (SELECT COUNT(DISTINCT id) FROM public.locations WHERE partner_type = 'Customer' AND branch_id = br.id) as active_customers,
-    (SELECT COALESCE(SUM(quantity), 0) FROM public.batch_movements bm JOIN public.locations l ON bm.to_location_id = l.id WHERE bm.transaction_date = CURRENT_DATE AND l.branch_id = br.id) as movements_today
-FROM public.branches br
-LEFT JOIN public.locations s ON s.branch_id = br.id
-LEFT JOIN public.batches b ON b.current_location_id = s.id
-GROUP BY br.id, br.name;
+    COALESCE(SUM(b.quantity), 0) as total_fleet
+FROM public.batches b
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id
+LEFT JOIN public.branches br ON s.branch_id = br.id
+GROUP BY br.name;
 
 CREATE OR REPLACE VIEW public.vw_batch_forensics AS
 SELECT 
     bm.transaction_date as date,
     COALESCE(bm.condition, 'unknown') as type,
     bm.batch_id,
-    s_from.name as from_location,
-    s_to.name as to_location,
+    COALESCE(s_from.name, bm.from_location_id, 'N/A') as from_location,
+    COALESCE(s_to.name, bm.to_location_id, 'N/A') as to_location,
     d.full_name as driver_name,
     bm.quantity,
-    br.name as branch_name,
+    COALESCE(br.name, 'N/A') as branch_name,
     bm.timestamp
 FROM public.batch_movements bm
 LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id

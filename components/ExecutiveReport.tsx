@@ -160,7 +160,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
                         <span className="text-2xl font-black text-slate-300">#0{index + 1}</span>
                       </div>
                       <h4 className="text-xl font-bold text-slate-800">{bp.branch_name}</h4>
-                      <p className="text-xs text-slate-400 font-medium">{bp.total_units.toLocaleString()} Assets Managed</p>
+                      <p className="text-xs text-slate-400 font-medium">{(bp.total_units || 0).toLocaleString()} Assets Managed</p>
                    </div>
                    <div className="mt-8">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">Primary Risk Factor</p>
