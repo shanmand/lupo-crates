@@ -211,6 +211,11 @@ CREATE TABLE public.users (
 CREATE TABLE public.trucks (
     id TEXT PRIMARY KEY,
     plate_number TEXT NOT NULL UNIQUE,
+    model TEXT,
+    capacity INTEGER,
+    license_disc_expiry DATE,
+    last_renewal_cost_zar NUMERIC DEFAULT 0,
+    license_doc_url TEXT,
     branch_id TEXT REFERENCES public.branches(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -218,16 +223,26 @@ CREATE TABLE public.trucks (
 CREATE TABLE public.drivers (
     id TEXT PRIMARY KEY,
     full_name TEXT NOT NULL,
+    license_number TEXT,
+    license_expiry DATE,
+    prdp_expiry DATE,
+    license_doc_url TEXT,
     branch_id TEXT REFERENCES public.branches(id),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE public.trips (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY,
     truck_id TEXT REFERENCES public.trucks(id),
     driver_id TEXT REFERENCES public.drivers(id),
+    route_name TEXT,
     status TEXT DEFAULT 'Planned', -- Planned, In Progress, Completed, Cancelled
+    scheduled_date DATE,
+    scheduled_departure_time TEXT,
+    start_odometer INTEGER,
+    end_odometer INTEGER,
+    start_location_id TEXT,
     start_time TIMESTAMPTZ,
     end_time TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -235,12 +250,14 @@ CREATE TABLE public.trips (
 
 CREATE TABLE public.trip_stops (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    trip_id UUID REFERENCES public.trips(id) ON DELETE CASCADE,
+    trip_id TEXT REFERENCES public.trips(id) ON DELETE CASCADE,
     location_id TEXT, -- Can be from locations or business_parties
     stop_order INTEGER NOT NULL,
     status TEXT DEFAULT 'Pending', -- Pending, Arrived, Departed, Skipped
-    arrival_time TIMESTAMPTZ,
-    departure_time TIMESTAMPTZ,
+    planned_arrival TIMESTAMPTZ,
+    actual_arrival TIMESTAMPTZ,
+    actual_departure TIMESTAMPTZ,
+    notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -312,6 +329,8 @@ CREATE TABLE public.driver_shifts (
     truck_id TEXT REFERENCES public.trucks(id),
     start_time TIMESTAMPTZ DEFAULT NOW(),
     end_time TIMESTAMPTZ,
+    manual_end_time TIMESTAMPTZ,
+    notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -459,6 +478,16 @@ BEGIN
     VALUES (v_batch_id, p_origin_id, p_location_id, v_user_uuid, p_quantity, 'New/Intake', p_notes);
     
     RETURN v_batch_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION delete_inventory_batch(p_batch_id TEXT)
+RETURNS VOID AS $$
+BEGIN
+    -- Delete movements first
+    DELETE FROM public.batch_movements WHERE batch_id = p_batch_id;
+    -- Delete batch
+    DELETE FROM public.batches WHERE id = p_batch_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -918,6 +947,7 @@ FROM public.drivers
 WHERE is_active = TRUE;
 
 -- INVENTORY SUMMARY
+DROP VIEW IF EXISTS public.vw_inventory_summary CASCADE;
 CREATE OR REPLACE VIEW public.vw_inventory_summary AS
 SELECT 
     b.current_location_id as location_id,
@@ -936,6 +966,7 @@ WHERE b.status = 'Success' AND b.quantity > 0
 GROUP BY b.current_location_id, s.name, s.type, s.branch_id, b.asset_id, am.name, am.type;
 
 -- ASSET REGISTRY
+DROP VIEW IF EXISTS public.vw_asset_registry CASCADE;
 CREATE OR REPLACE VIEW public.vw_asset_registry AS
 SELECT 
     b.id as batch_id,
@@ -952,6 +983,123 @@ SELECT
 FROM public.batches b
 LEFT JOIN public.asset_master am ON b.asset_id = am.id
 LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+
+-- GLOBAL INVENTORY TRACKER
+DROP VIEW IF EXISTS public.vw_global_inventory_tracker CASCADE;
+CREATE OR REPLACE VIEW public.vw_global_inventory_tracker AS
+SELECT 
+    b.id AS batch_id,
+    b.asset_id,
+    a.name AS asset_name,
+    b.quantity,
+    b.current_location_id,
+    s.name AS current_location,
+    s.branch_id,
+    b.status AS batch_status,
+    b.transaction_date,
+    public.calculate_batch_accrual(b.id) AS daily_accrued_liability,
+    (CURRENT_DATE - b.transaction_date) AS days_in_circulation
+FROM public.batches b
+JOIN public.asset_master a ON b.asset_id = a.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+
+-- ASSET INTELLIGENCE
+DROP VIEW IF EXISTS public.vw_asset_intelligence CASCADE;
+CREATE OR REPLACE VIEW public.vw_asset_intelligence AS
+SELECT 
+    b.id as asset_code,
+    am.type as asset_type,
+    am.ownership_type as ownership,
+    b.status,
+    'Good' as condition, 
+    COALESCE(s.name, 'Unknown') as customer,
+    am.billing_model as charge_type,
+    public.calculate_batch_accrual(b.id) as accrued
+FROM public.batches b
+JOIN public.asset_master am ON b.asset_id = am.id
+LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
+
+-- MANAGEMENT KPIS
+DROP VIEW IF EXISTS public.vw_management_kpis CASCADE;
+CREATE OR REPLACE VIEW public.vw_management_kpis AS
+SELECT 
+    b.id as branch_id,
+    b.name as branch_name,
+    COUNT(DISTINCT t.id) as total_trips,
+    COUNT(DISTINCT dr.id) as active_drivers,
+    COUNT(DISTINCT tr.id) as active_trucks,
+    COALESCE(SUM(ba.quantity), 0) as total_units,
+    COALESCE(SUM(public.calculate_batch_accrual(ba.id)), 0) as total_accrued_charges
+FROM public.branches b
+LEFT JOIN public.drivers dr ON b.id = dr.branch_id AND dr.is_active = true
+LEFT JOIN public.trucks tr ON b.id = tr.branch_id
+LEFT JOIN public.trips t ON tr.id = t.truck_id AND t.scheduled_date = CURRENT_DATE
+LEFT JOIN public.vw_all_sources s ON b.id = s.branch_id
+LEFT JOIN public.batches ba ON s.id = ba.current_location_id
+GROUP BY b.id, b.name;
+
+-- OPERATIONAL TRIP AUDIT
+DROP VIEW IF EXISTS public.vw_operational_trip_audit CASCADE;
+CREATE OR REPLACE VIEW public.vw_operational_trip_audit AS
+SELECT 
+    t.id as trip_id,
+    t.scheduled_date,
+    tr.plate_number as truck_plate,
+    d.full_name as driver_name,
+    t.status as trip_status,
+    ts.stop_order,
+    s.name as stop_location,
+    ts.status as stop_status,
+    ts.planned_arrival,
+    ts.actual_arrival,
+    ts.actual_departure,
+    CASE 
+        WHEN ts.actual_arrival > ts.planned_arrival THEN 'Delayed'
+        WHEN ts.actual_arrival IS NOT NULL THEN 'On Time'
+        ELSE 'Pending'
+    END as delay_status
+FROM public.trips t
+JOIN public.trucks tr ON t.truck_id = tr.id
+JOIN public.drivers d ON t.driver_id = d.id
+JOIN public.trip_stops ts ON t.id = ts.trip_id
+LEFT JOIN public.vw_all_sources s ON ts.location_id = s.id;
+
+-- TRIP AUDIT TRAIL (Logistics Movement Trace)
+DROP VIEW IF EXISTS public.vw_trip_audit_trail CASCADE;
+CREATE OR REPLACE VIEW public.vw_trip_audit_trail AS
+SELECT 
+    bm.id as movement_id,
+    bm.timestamp as movement_time,
+    bm.transaction_date,
+    bm.batch_id,
+    bm.quantity,
+    bm.condition,
+    bm.route_instructions,
+    s_from.name as from_location,
+    s_to.name as to_location,
+    d.full_name as driver_name,
+    d.id as driver_id,
+    t.plate_number as truck_plate,
+    t.id as truck_id,
+    t.branch_id,
+    ds.id as shift_id,
+    ds.start_time as shift_start,
+    ds.end_time as shift_end,
+    ds.manual_end_time as shift_manual_end,
+    ds.notes as shift_notes
+FROM public.batch_movements bm
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.drivers d ON bm.driver_id = d.id
+LEFT JOIN public.trucks t ON bm.truck_id = t.id
+LEFT JOIN LATERAL (
+    SELECT * FROM public.driver_shifts s
+    WHERE s.driver_id = bm.driver_id
+    AND s.truck_id = bm.truck_id
+    AND s.start_time <= bm.timestamp
+    ORDER BY s.start_time DESC
+    LIMIT 1
+) ds ON true;
 
 -- STOCK TAKE HISTORY
 CREATE OR REPLACE VIEW public.vw_stock_take_history AS

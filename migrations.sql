@@ -4,6 +4,10 @@
 -- 0. Add missing quantity column to batch_movements
 ALTER TABLE public.batch_movements ADD COLUMN IF NOT EXISTS quantity INTEGER;
 
+-- Add manual_end_time and notes to driver_shifts
+ALTER TABLE public.driver_shifts ADD COLUMN IF NOT EXISTS manual_end_time TIMESTAMPTZ;
+ALTER TABLE public.driver_shifts ADD COLUMN IF NOT EXISTS notes TEXT;
+
 -- 1. Master Logistics Trace View
 DROP VIEW IF EXISTS public.vw_master_logistics_trace;
 CREATE OR REPLACE VIEW public.vw_master_logistics_trace AS
