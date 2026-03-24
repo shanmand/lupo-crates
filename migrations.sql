@@ -368,22 +368,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 12. Batch Summary Report View
-DROP VIEW IF EXISTS public.vw_intake_summary_report;
-CREATE OR REPLACE VIEW public.vw_intake_summary_report AS
-SELECT 
-    date_trunc('week', bm.transaction_date)::date as week_starting,
-    COALESCE(l.partner_type, bp.party_type) as source_type,
-    COALESCE(l.name, bp.name) as source_name,
-    SUM(bm.quantity) as total_quantity
-FROM public.batch_movements bm
-JOIN public.locations tl ON bm.to_location_id = tl.id
-LEFT JOIN public.locations l ON bm.from_location_id = l.id
-LEFT JOIN public.business_parties bp ON bm.from_location_id = bp.id::text
-WHERE tl.partner_type = 'Internal' -- Destination is us
-GROUP BY 1, 2, 3;
-
--- ==========================================
 -- 14. Synchronize Views for Business Parties
 -- ==========================================
 
@@ -415,6 +399,19 @@ SELECT
     name || ' (' || party_type || ')' as display_name,
     2 as sort_group
 FROM public.business_parties;
+
+-- 12. Batch Summary Report View (Moved after vw_all_sources)
+DROP VIEW IF EXISTS public.vw_intake_summary_report;
+CREATE OR REPLACE VIEW public.vw_intake_summary_report AS
+SELECT 
+    date_trunc('week', bm.transaction_date)::date as week_starting,
+    src.partner_type as source_type,
+    src.name as source_name,
+    SUM(bm.quantity) as total_quantity
+FROM public.batch_movements bm
+LEFT JOIN public.vw_all_sources src ON bm.from_location_id = src.id
+LEFT JOIN public.vw_all_sources dest ON bm.to_location_id = dest.id
+GROUP BY 1, 2, 3;
 
 -- Update vw_all_origins to be consistent
 DROP VIEW IF EXISTS public.vw_all_origins CASCADE;

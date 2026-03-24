@@ -747,8 +747,8 @@ SELECT
     address,
     name || ' (' || partner_type || ')' as display_name,
     CASE 
-        WHEN category = 'Home' THEN 1 
-        WHEN type = 'In Transit' THEN 3 
+        WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
+        WHEN type = 'In Transit' THEN 3
         ELSE 2 
     END as sort_group,
     'Location' as source_table
@@ -769,11 +769,13 @@ FROM public.business_parties;
 
 -- ORIGINS (FOR LOGISTICS)
 CREATE OR REPLACE VIEW public.vw_all_origins AS
-SELECT * FROM public.vw_all_sources;
+SELECT * FROM public.vw_all_sources
+ORDER BY sort_group, name;
 
 -- DESTINATIONS (FOR LOGISTICS)
 CREATE OR REPLACE VIEW public.vw_movement_destinations AS
-SELECT * FROM public.vw_all_sources;
+SELECT * FROM public.vw_all_sources
+ORDER BY sort_group, name;
 
 -- PENDING COLLECTIONS
 CREATE OR REPLACE VIEW public.vw_pending_collections AS
@@ -1138,6 +1140,19 @@ JOIN public.batch_movements bm ON b.id = bm.batch_id AND bm.condition = 'New/Int
 LEFT JOIN public.vw_all_sources s_to ON b.current_location_id = s_to.id
 LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
 ORDER BY b.created_at DESC;
+
+-- BATCH SUMMARY REPORT VIEW
+DROP VIEW IF EXISTS public.vw_intake_summary_report;
+CREATE OR REPLACE VIEW public.vw_intake_summary_report AS
+SELECT 
+    date_trunc('week', bm.transaction_date)::date as week_starting,
+    src.partner_type as source_type,
+    src.name as source_name,
+    SUM(bm.quantity) as total_quantity
+FROM public.batch_movements bm
+LEFT JOIN public.vw_all_sources src ON bm.from_location_id = src.id
+LEFT JOIN public.vw_all_sources dest ON bm.to_location_id = dest.id
+GROUP BY 1, 2, 3;
 
 -- LOSS REPORT
 CREATE OR REPLACE VIEW public.vw_loss_report AS
