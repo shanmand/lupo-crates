@@ -435,6 +435,7 @@ CREATE OR REPLACE FUNCTION process_inventory_intake(
     p_asset_id TEXT,
     p_quantity INTEGER,
     p_location_id TEXT,
+    p_origin_id TEXT,
     p_notes TEXT,
     p_user_id TEXT -- Changed to TEXT for robustness (handles 'dev' etc)
 ) RETURNS TEXT AS $$
@@ -454,10 +455,36 @@ BEGIN
     INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date)
     VALUES (v_batch_id, p_asset_id, p_quantity, p_location_id, 'Success', CURRENT_DATE);
     
-    INSERT INTO public.batch_movements (batch_id, to_location_id, origin_user_id, quantity, condition, notes)
-    VALUES (v_batch_id, p_location_id, v_user_uuid, p_quantity, 'New/Intake', p_notes);
+    INSERT INTO public.batch_movements (batch_id, from_location_id, to_location_id, origin_user_id, quantity, condition, notes)
+    VALUES (v_batch_id, p_origin_id, p_location_id, v_user_uuid, p_quantity, 'New/Intake', p_notes);
     
     RETURN v_batch_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION update_inventory_intake(
+    p_batch_id TEXT,
+    p_asset_id TEXT,
+    p_quantity INTEGER,
+    p_location_id TEXT,
+    p_origin_id TEXT,
+    p_notes TEXT
+) RETURNS VOID AS $$
+BEGIN
+    -- Update batch
+    UPDATE public.batches
+    SET asset_id = p_asset_id,
+        quantity = p_quantity,
+        current_location_id = p_location_id
+    WHERE id = p_batch_id;
+
+    -- Update movement
+    UPDATE public.batch_movements
+    SET from_location_id = p_origin_id,
+        to_location_id = p_location_id,
+        quantity = p_quantity,
+        notes = p_notes
+    WHERE batch_id = p_batch_id AND condition = 'New/Intake';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -825,6 +852,38 @@ JOIN public.vw_all_sources s ON bt.current_location_id = s.id
 LEFT JOIN public.branches br ON s.branch_id = br.id 
 GROUP BY br.name, s.name, s.id, br.id;
 
+-- DASHBOARD STATS
+CREATE OR REPLACE VIEW public.vw_dashboard_stats AS
+SELECT 
+    b.name as branch_name,
+    COALESCE(SUM(bt.quantity), 0) as total_units,
+    COALESCE(SUM(CASE WHEN bt.status = 'Pending' THEN bt.quantity ELSE 0 END), 0) as pending_units,
+    COALESCE(SUM(CASE WHEN bt.status = 'Success' THEN bt.quantity ELSE 0 END), 0) as success_units,
+    COALESCE(SUM(CASE WHEN (CURRENT_DATE - bt.transaction_date) > 14 THEN bt.quantity ELSE 0 END), 0) as stagnant_units,
+    COALESCE(SUM(public.calculate_batch_accrual(bt.id)), 0) as accrued_rental,
+    COALESCE(SUM(CASE WHEN bt.status = 'Pending' THEN public.calculate_batch_accrual(bt.id) ELSE 0 END), 0) as pending_charges
+FROM public.branches b
+LEFT JOIN public.locations loc ON b.id = loc.branch_id
+LEFT JOIN public.batches bt ON loc.id = bt.current_location_id
+GROUP BY b.id, b.name;
+
+-- BATCH FORENSICS (Recent Activity)
+CREATE OR REPLACE VIEW public.vw_batch_forensics AS
+SELECT 
+    bm.timestamp as date,
+    bm.condition as type,
+    bm.batch_id,
+    bm.quantity,
+    s_from.name as from_location,
+    s_to.name as to_location,
+    br.name as branch_name,
+    bm.timestamp
+FROM public.batch_movements bm
+JOIN public.batches b ON bm.batch_id = b.id
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.branches br ON s_to.branch_id = br.id;
+
 -- EXECUTIVE REPORT
 CREATE OR REPLACE VIEW public.vw_executive_report AS
 SELECT 
@@ -910,6 +969,27 @@ FROM public.stock_takes st
 JOIN public.vw_all_sources s ON st.location_id = s.id
 LEFT JOIN public.stock_take_items sti ON st.id = sti.stock_take_id
 GROUP BY st.id, st.location_id, s.name, st.take_date, st.counter_name, st.status, st.notes;
+
+-- RECENT INTAKES
+CREATE OR REPLACE VIEW public.vw_recent_intakes AS
+SELECT 
+    b.id as batch_id,
+    b.asset_id,
+    am.name as asset_name,
+    b.quantity,
+    b.current_location_id as to_location_id,
+    s_to.name as to_location_name,
+    bm.from_location_id as from_location_id,
+    s_from.name as from_location_name,
+    b.transaction_date,
+    bm.notes,
+    b.created_at
+FROM public.batches b
+JOIN public.asset_master am ON b.asset_id = am.id
+JOIN public.batch_movements bm ON b.id = bm.batch_id AND bm.condition = 'New/Intake'
+LEFT JOIN public.vw_all_sources s_to ON b.current_location_id = s_to.id
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+ORDER BY b.created_at DESC;
 
 -- LOSS REPORT
 CREATE OR REPLACE VIEW public.vw_loss_report AS
