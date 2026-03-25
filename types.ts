@@ -466,6 +466,7 @@ export interface Trip {
   scheduled_departure_time?: string;
   start_odometer?: number;
   end_odometer?: number;
+  start_location_id?: string;
 }
 
 export interface TripStop {

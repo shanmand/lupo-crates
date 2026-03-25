@@ -252,7 +252,7 @@ CREATE TABLE public.trip_stops (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     trip_id TEXT REFERENCES public.trips(id) ON DELETE CASCADE,
     location_id TEXT, -- Can be from locations or business_parties
-    stop_order INTEGER NOT NULL,
+    sequence_number INTEGER NOT NULL,
     status TEXT DEFAULT 'Pending', -- Pending, Arrived, Departed, Skipped
     planned_arrival TIMESTAMPTZ,
     actual_arrival TIMESTAMPTZ,
