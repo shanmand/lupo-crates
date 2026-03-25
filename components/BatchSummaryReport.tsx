@@ -288,7 +288,7 @@ const BatchSummaryReport: React.FC = () => {
               <tbody className="divide-y divide-slate-50">
                 {filteredData.slice(0, 10).map((item, i) => (
                   <tr key={`${item.week_starting}-${item.source_name}-${i}`} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-6 py-4 text-xs font-bold text-slate-600">{format(new Date(item.week_starting), 'MMM dd, yyyy')}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-600">{item.week_starting ? format(new Date(item.week_starting), 'MMM dd, yyyy') : 'N/A'}</td>
                     <td className="px-6 py-4">
                       <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{item.source_name}</p>
                     </td>
@@ -301,7 +301,7 @@ const BatchSummaryReport: React.FC = () => {
                         {item.source_type}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{item.total_quantity.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{(item.total_quantity || 0).toLocaleString()}</td>
                   </tr>
                 ))}
                 {filteredData.length === 0 && (
