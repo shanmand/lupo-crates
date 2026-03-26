@@ -1049,7 +1049,7 @@ SELECT
     tr.plate_number as truck_plate,
     d.full_name as driver_name,
     t.status as trip_status,
-    ts.stop_order,
+    ts.sequence_number,
     s.name as stop_location,
     ts.status as stop_status,
     ts.planned_arrival,

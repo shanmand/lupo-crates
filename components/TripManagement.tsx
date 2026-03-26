@@ -172,6 +172,10 @@ const TripManagement: React.FC = () => {
 
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
+  useEffect(() => {
+    console.log('TripManagement: locations data:', locations);
+  }, [locations]);
+
   const fetchTripStops = async (tripId: string) => {
     const { data, error } = await supabase
       .from('trip_stops')
