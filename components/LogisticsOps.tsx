@@ -321,6 +321,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
             quantity: item.quantity,
             route_instructions: routeInstructions,
             timestamp: new Date(movementDate).toISOString(),
+            transaction_date: movementDate,
             condition: condition,
             origin_user_id: currentUser.id
           };
@@ -492,10 +493,10 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                     value={selectedStopId}
                     onChange={e => setSelectedStopId(e.target.value)}
                   >
-                    <option value="">Select Stop</option>
+                    <option value="">{tripStops.length === 0 && selectedTripId ? "No stops found for this trip" : "Select Stop"}</option>
                     {tripStops.map(s => (
                       <option key={s.id} value={s.id}>
-                        Stop {s.sequence_number}: {locations.find(l => l.id === s.location_id)?.name}
+                        Stop {s.sequence_number}: {locations.find(l => l.id === s.location_id)?.name || `Location ID: ${s.location_id}`}
                       </option>
                     ))}
                   </select>

@@ -24,7 +24,7 @@ import {
   FileText
 } from 'lucide-react';
 import { supabase } from '../supabase';
-import { format, startOfWeek, subDays, isWithinInterval } from 'date-fns';
+import { format, startOfWeek, subDays, isWithinInterval, parseISO } from 'date-fns';
 
 interface IntakeSummary {
   week_starting: string;
@@ -71,24 +71,25 @@ const BatchSummaryReport: React.FC = () => {
     if (!start) return data;
 
     return data.filter(item => {
-      const itemDate = new Date(item.week_starting);
+      const itemDate = parseISO(item.week_starting);
       return itemDate >= start!;
     });
   }, [data, dateFilter]);
 
   const stats = useMemo(() => {
-    const totalIntakes = filteredData.reduce((acc, curr) => acc + curr.total_quantity, 0);
+    const totalIntakes = filteredData.reduce((acc, curr) => acc + (curr.total_quantity || 0), 0);
     
     const sourceTotals: Record<string, number> = {};
     filteredData.forEach(item => {
-      sourceTotals[item.source_name] = (sourceTotals[item.source_name] || 0) + item.total_quantity;
+      const name = item.source_name || 'Unknown Source';
+      sourceTotals[name] = (sourceTotals[name] || 0) + (item.total_quantity || 0);
     });
 
     const topSource = Object.entries(sourceTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
 
     const customerIntakes = filteredData
-      .filter(item => item.source_type === 'Customer')
-      .reduce((acc, curr) => acc + curr.total_quantity, 0);
+      .filter(item => item.source_type === 'Customer' || item.source_type === 'External')
+      .reduce((acc, curr) => acc + (curr.total_quantity || 0), 0);
 
     const returnRate = totalIntakes > 0 ? (customerIntakes / totalIntakes) * 100 : 0;
 
@@ -96,19 +97,16 @@ const BatchSummaryReport: React.FC = () => {
   }, [filteredData]);
 
   const chartData = useMemo(() => {
-    const typeTotals: Record<string, number> = {
-      'Internal': 0,
-      'Supplier': 0,
-      'Customer': 0
-    };
+    const typeTotals: Record<string, number> = {};
 
     filteredData.forEach(item => {
-      if (typeTotals[item.source_type] !== undefined) {
-        typeTotals[item.source_type] += item.total_quantity;
-      }
+      const type = item.source_type || 'Unknown';
+      typeTotals[type] = (typeTotals[type] || 0) + (item.total_quantity || 0);
     });
 
-    return Object.entries(typeTotals).map(([name, value]) => ({ name, value }));
+    return Object.entries(typeTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value]) => ({ name, value }));
   }, [filteredData]);
 
   const handleDownloadCSV = () => {
@@ -222,10 +220,10 @@ const BatchSummaryReport: React.FC = () => {
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
           <div className="flex items-center justify-between mb-8">
             <h3 className="font-black text-xs uppercase tracking-[0.2em] text-slate-800">Total Quantity by Source Type</h3>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               {chartData.map((entry, index) => (
                 <div key={entry.name} className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index] }}></div>
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
                   <span className="text-[9px] font-black text-slate-400 uppercase">{entry.name}</span>
                 </div>
               ))}

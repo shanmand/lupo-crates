@@ -1145,13 +1145,12 @@ ORDER BY b.created_at DESC;
 DROP VIEW IF EXISTS public.vw_intake_summary_report;
 CREATE OR REPLACE VIEW public.vw_intake_summary_report AS
 SELECT 
-    date_trunc('week', bm.transaction_date)::date as week_starting,
-    src.partner_type as source_type,
-    src.name as source_name,
+    COALESCE(date_trunc('week', bm.transaction_date)::date, CURRENT_DATE) as week_starting,
+    COALESCE(src.partner_type, 'Unknown') as source_type,
+    COALESCE(src.name, 'Unknown Source') as source_name,
     SUM(bm.quantity) as total_quantity
 FROM public.batch_movements bm
 LEFT JOIN public.vw_all_sources src ON bm.from_location_id = src.id
-LEFT JOIN public.vw_all_sources dest ON bm.to_location_id = dest.id
 GROUP BY 1, 2, 3;
 
 -- LOSS REPORT
