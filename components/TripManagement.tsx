@@ -4,6 +4,103 @@ import { Truck, MapPin, Calendar, Plus, ChevronRight, CheckCircle2, Clock, User,
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Trip, TripStop, Driver, Truck as TruckType, Source } from '../types';
 
+const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; locations: Source[] }> = ({ startLocationId, stops, locations }) => {
+  const [totalKm, setTotalKm] = useState<number | null>(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+
+  useEffect(() => {
+    const calculateDistance = async () => {
+      if (!startLocationId || stops.length === 0) {
+        setTotalKm(null);
+        return;
+      }
+
+      setIsCalculating(true);
+      try {
+        const startLoc = locations.find(l => l.id === startLocationId);
+        if (!startLoc?.address) return;
+
+        // Helper to get coordinates from address (Nominatim)
+        const getCoords = async (address: string) => {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`);
+            const data = await res.json();
+            if (data && data[0]) {
+              return { lat: data[0].lat, lon: data[0].lon };
+            }
+          } catch (e) {
+            console.error("Geocoding error:", e);
+          }
+          return null;
+        };
+
+        let totalDistance = 0;
+        let currentOriginCoords = await getCoords(startLoc.address);
+
+        if (!currentOriginCoords) {
+          // Fallback: simple estimation if geocoding fails
+          setTotalKm(stops.length * 15); // Rough guess: 15km per stop
+          return;
+        }
+
+        for (const stop of stops) {
+          const destLoc = locations.find(l => l.id === stop.location_id);
+          if (!destLoc?.address) continue;
+
+          const destCoords = await getCoords(destLoc.address);
+          if (!destCoords) continue;
+
+          // OSRM Routing API (Free)
+          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${currentOriginCoords.lon},${currentOriginCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`;
+          const routeRes = await fetch(osrmUrl);
+          const routeData = await routeRes.json();
+
+          if (routeData.routes?.[0]?.distance) {
+            totalDistance += routeData.routes[0].distance;
+            currentOriginCoords = destCoords;
+          } else {
+            // Fallback to Haversine if OSRM fails
+            const R = 6371e3; // metres
+            const φ1 = (parseFloat(currentOriginCoords.lat) * Math.PI) / 180;
+            const φ2 = (parseFloat(destCoords.lat) * Math.PI) / 180;
+            const Δφ = ((parseFloat(destCoords.lat) - parseFloat(currentOriginCoords.lat)) * Math.PI) / 180;
+            const Δλ = ((parseFloat(destCoords.lon) - parseFloat(currentOriginCoords.lon)) * Math.PI) / 180;
+
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const d = R * c; // in metres
+            
+            totalDistance += d * 1.3; // Add 30% for road distance vs straight line
+            currentOriginCoords = destCoords;
+          }
+          
+          // Respect Nominatim rate limits (1 req/sec)
+          await new Promise(r => setTimeout(r, 1000));
+        }
+
+        setTotalKm(totalDistance / 1000);
+      } catch (err) {
+        console.error("Error calculating total distance:", err);
+      } finally {
+        setIsCalculating(false);
+      }
+    };
+
+    calculateDistance();
+  }, [startLocationId, stops, locations]);
+
+  if (!startLocationId || stops.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 text-xs font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full">
+      <Navigation size={12} />
+      {isCalculating ? 'Calculating...' : `${totalKm?.toFixed(1) || '--'} KM Estimated`}
+    </div>
+  );
+};
+
 const TripManagement: React.FC = () => {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -208,103 +305,6 @@ const TripManagement: React.FC = () => {
     } catch (err) {
       console.error("Error deleting trip:", err);
     }
-  };
-
-  const DistanceEstimator: React.FC<{ trip: Trip; stops: TripStop[]; locations: Source[] }> = ({ trip, stops, locations }) => {
-    const [totalKm, setTotalKm] = useState<number | null>(null);
-    const [isCalculating, setIsCalculating] = useState(false);
-
-    useEffect(() => {
-      const calculateDistance = async () => {
-        if (!trip.start_location_id || stops.length === 0) {
-          setTotalKm(null);
-          return;
-        }
-
-        setIsCalculating(true);
-        try {
-          const startLoc = locations.find(l => l.id === trip.start_location_id);
-          if (!startLoc?.address) return;
-
-          // Helper to get coordinates from address (Nominatim)
-          const getCoords = async (address: string) => {
-            try {
-              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`);
-              const data = await res.json();
-              if (data && data[0]) {
-                return { lat: data[0].lat, lon: data[0].lon };
-              }
-            } catch (e) {
-              console.error("Geocoding error:", e);
-            }
-            return null;
-          };
-
-          let totalDistance = 0;
-          let currentOriginCoords = await getCoords(startLoc.address);
-
-          if (!currentOriginCoords) {
-            // Fallback: simple estimation if geocoding fails
-            setTotalKm(stops.length * 15); // Rough guess: 15km per stop
-            return;
-          }
-
-          for (const stop of stops) {
-            const destLoc = locations.find(l => l.id === stop.location_id);
-            if (!destLoc?.address) continue;
-
-            const destCoords = await getCoords(destLoc.address);
-            if (!destCoords) continue;
-
-            // OSRM Routing API (Free)
-            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${currentOriginCoords.lon},${currentOriginCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`;
-            const routeRes = await fetch(osrmUrl);
-            const routeData = await routeRes.json();
-
-            if (routeData.routes?.[0]?.distance) {
-              totalDistance += routeData.routes[0].distance;
-              currentOriginCoords = destCoords;
-            } else {
-              // Fallback to Haversine if OSRM fails
-              const R = 6371e3; // metres
-              const φ1 = (parseFloat(currentOriginCoords.lat) * Math.PI) / 180;
-              const φ2 = (parseFloat(destCoords.lat) * Math.PI) / 180;
-              const Δφ = ((parseFloat(destCoords.lat) - parseFloat(currentOriginCoords.lat)) * Math.PI) / 180;
-              const Δλ = ((parseFloat(destCoords.lon) - parseFloat(currentOriginCoords.lon)) * Math.PI) / 180;
-
-              const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                        Math.cos(φ1) * Math.cos(φ2) *
-                        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-              const d = R * c; // in metres
-              
-              totalDistance += d * 1.3; // Add 30% for road distance vs straight line
-              currentOriginCoords = destCoords;
-            }
-            
-            // Respect Nominatim rate limits (1 req/sec)
-            await new Promise(r => setTimeout(r, 1000));
-          }
-
-          setTotalKm(totalDistance / 1000);
-        } catch (err) {
-          console.error("Error calculating total distance:", err);
-        } finally {
-          setIsCalculating(false);
-        }
-      };
-
-      calculateDistance();
-    }, [trip.start_location_id, stops, locations]);
-
-    if (!trip.start_location_id || stops.length === 0) return null;
-
-    return (
-      <div className="flex items-center gap-2 text-xs font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full">
-        <Navigation size={12} />
-        {isCalculating ? 'Calculating...' : `${totalKm?.toFixed(1) || '--'} KM Estimated`}
-      </div>
-    );
   };
 
   const updateStopStatus = async (stopId: string, status: string) => {
