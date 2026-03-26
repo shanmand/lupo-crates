@@ -1,12 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Truck, MapPin, Calendar, Plus, ChevronRight, CheckCircle2, Clock, User, Navigation, AlertCircle, Loader2, Save, Trash2, ArrowRight, ArrowUp, ArrowDown, Edit } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Trip, TripStop, Driver, Truck as TruckType, Source } from '../types';
+import { useMasterData } from '../MasterDataContext';
 
 const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; locations: Source[] }> = ({ startLocationId, stops, locations }) => {
   const [totalKm, setTotalKm] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const lastCalculationRef = useRef<string>('');
 
   useEffect(() => {
     const calculateDistance = async () => {
@@ -15,10 +17,18 @@ const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; 
         return;
       }
 
+      // Create a key to check if we need to recalculate
+      const calculationKey = `${startLocationId}-${stops.map(s => s.location_id).join(',')}`;
+      if (calculationKey === lastCalculationRef.current) return;
+      lastCalculationRef.current = calculationKey;
+
       setIsCalculating(true);
       try {
         const startLoc = locations.find(l => l.id === startLocationId);
-        if (!startLoc?.address) return;
+        if (!startLoc?.address) {
+          setTotalKm(null);
+          return;
+        }
 
         // Helper to get coordinates from address (Nominatim)
         const getCoords = async (address: string) => {
@@ -102,11 +112,15 @@ const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; 
 };
 
 const TripManagement: React.FC = () => {
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [trucks, setTrucks] = useState<TruckType[]>([]);
-  const [locations, setLocations] = useState<Source[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { 
+    trips, 
+    drivers, 
+    trucks, 
+    allSources: locations, 
+    isLoading,
+    refreshTrips
+  } = useMasterData();
+  
   const [isSaving, setIsSaving] = useState(false);
   const [showNewTripModal, setShowNewTripModal] = useState(false);
   const [showEditTripModal, setShowEditTripModal] = useState(false);
@@ -131,35 +145,6 @@ const TripManagement: React.FC = () => {
   });
 
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    if (!isSupabaseConfigured) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const [tripsRes, driversRes, trucksRes, locationsRes] = await Promise.all([
-        supabase.from('trips').select('*').order('created_at', { ascending: false }),
-        supabase.from('drivers').select('*').eq('is_active', true),
-        supabase.from('trucks').select('*'),
-        supabase.from('vw_all_sources').select('*')
-      ]);
-
-      if (tripsRes.data) setTrips(tripsRes.data);
-      if (driversRes.data) setDrivers(driversRes.data);
-      if (trucksRes.data) setTrucks(trucksRes.data);
-      if (locationsRes.data) setLocations(locationsRes.data);
-    } catch (err) {
-      console.error("Error fetching trip data:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const fetchTripStops = async (tripId: string) => {
     const { data, error } = await supabase
@@ -191,7 +176,7 @@ const TripManagement: React.FC = () => {
         start_odometer: 0,
         end_odometer: 0
       });
-      fetchData();
+      refreshTrips();
     } catch (err: any) {
       console.error("Error creating trip:", err);
       setError(err.message || "Failed to create trip. Please check your connection and try again.");
@@ -282,7 +267,7 @@ const TripManagement: React.FC = () => {
       
       setShowEditTripModal(false);
       setSelectedTrip(editingTrip);
-      fetchData();
+      refreshTrips();
     } catch (err: any) {
       console.error("Error updating trip:", err);
       setError(err.message || "Failed to update trip.");
@@ -301,7 +286,7 @@ const TripManagement: React.FC = () => {
       
       setSelectedTrip(null);
       setTripStops([]);
-      fetchData();
+      refreshTrips();
     } catch (err) {
       console.error("Error deleting trip:", err);
     }

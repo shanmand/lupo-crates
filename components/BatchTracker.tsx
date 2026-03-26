@@ -4,19 +4,24 @@ import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, M
 import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History as HistoryIcon, Camera, UploadCloud, XCircle, User as UserIcon, ArrowLeft } from 'lucide-react';
 import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace, MovementCondition } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { useMasterData } from '../MasterDataContext';
 import BatchFinancialDetailCard from './BatchFinancialDetailCard';
 import ForensicTable from './ForensicTable';
 
 const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchId: branchFilterId }) => {
-  const [batches, setBatches] = useState<Batch[]>(isSupabaseConfigured ? [] : MOCK_BATCHES);
-  const [thaans, setThaans] = useState<ThaanSlip[]>(isSupabaseConfigured ? [] : MOCK_THAANS);
-  const [movements, setMovements] = useState<BatchMovement[]>(isSupabaseConfigured ? [] : MOCK_MOVEMENTS);
+  const { 
+    locations, 
+    trucks, 
+    drivers, 
+    assets: assetsMaster, 
+    refreshAll 
+  } = useMasterData();
+
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [thaans, setThaans] = useState<ThaanSlip[]>([]);
+  const [movements, setMovements] = useState<BatchMovement[]>([]);
   const [traces, setTraces] = useState<LogisticsTrace[]>([]);
-  const [locations, setLocations] = useState<Location[]>(isSupabaseConfigured ? [] : MOCK_LOCATIONS);
-  const [trucks, setTrucks] = useState<TruckType[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [fees, setFees] = useState<FeeSchedule[]>(isSupabaseConfigured ? [] : MOCK_FEES);
-  const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>(isSupabaseConfigured ? [] : MOCK_ASSETS);
   
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -52,36 +57,18 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
     }
   };
 
-  const fetchMasterData = async () => {
-    console.log('BatchTracker: Fetching master data...');
+  const fetchFees = async () => {
     if (!isSupabaseConfigured) return;
     try {
-      const [locsRes, trucksRes, driversRes, feesRes, assetsRes] = await Promise.all([
-        supabase.from('locations').select('*'),
-        supabase.from('trucks').select('*'),
-        supabase.from('drivers').select('*'),
-        supabase.from('fee_schedule').select('*'),
-        supabase.from('asset_master').select('*')
-      ]);
-
-      console.log('BatchTracker Master Data Received:', {
-        locations: locsRes.data?.length,
-        trucks: trucksRes.data?.length,
-        drivers: driversRes.data?.length
-      });
-
-      if (locsRes.data) setLocations(locsRes.data);
-      if (trucksRes.data) setTrucks(trucksRes.data);
-      if (driversRes.data) setDrivers(driversRes.data);
-      if (feesRes.data) setFees(feesRes.data);
-      if (assetsRes.data) setAssetsMaster(assetsRes.data);
+      const { data } = await supabase.from('fee_schedule').select('*');
+      if (data) setFees(data);
     } catch (err) {
-      console.error("Error fetching master data:", err);
+      console.error("Error fetching fees:", err);
     }
   };
 
   useEffect(() => {
-    fetchMasterData();
+    fetchFees();
   }, []);
 
   useEffect(() => {

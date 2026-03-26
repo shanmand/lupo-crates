@@ -36,6 +36,7 @@ import {
   Navigation
 } from 'lucide-react';
 import { UserProvider, useUser } from './UserContext';
+import { MasterDataProvider } from './MasterDataContext';
 import DashboardView from './components/DashboardView';
 import SchemaView from './components/SchemaView';
 import BatchTracker from './components/BatchTracker';
@@ -305,7 +306,9 @@ const SidebarButton: React.FC<{ active: boolean, onClick: () => void, icon: Reac
 
 const App: React.FC = () => (
   <UserProvider>
-    <AppContent />
+    <MasterDataProvider>
+      <AppContent />
+    </MasterDataProvider>
   </UserProvider>
 );
 

@@ -1,10 +1,11 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Truck as TruckIcon, MapPin, ClipboardList, CheckCircle2, AlertTriangle, ArrowRight, User as UserIcon, Package, Zap, Camera, FileText, Trash2, X, UserCheck, ShieldAlert, Lock, Info, History as HistoryIcon } from 'lucide-react';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_INVENTORY, MOCK_MOVEMENTS, MOCK_TRUCKS, MOCK_DRIVERS } from '../constants';
 import { MovementCondition, LocationType, AssetType, User as UserType, UserRole, Location, Batch, Truck as TruckType, Driver, AssetMaster, BatchMovement, MovementDestination, Trip, TripStop } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { normalizePayload, castId } from '../supabaseUtils';
+import { useMasterData } from '../MasterDataContext';
 
 interface LogisticsOpsProps {
   currentUser: UserType;
@@ -19,19 +20,19 @@ interface LogisticsOpsProps {
 
 const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, initialCollectionRequest }) => {
   const isReadOnly = currentUser.role === UserRole.EXECUTIVE;
+  const { 
+    locations, 
+    trucks, 
+    drivers, 
+    assets: assetsMaster, 
+    batches, 
+    trips, 
+    activeShifts,
+    allSources,
+    isLoading,
+    refreshAll
+  } = useMasterData();
   
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [origins, setOrigins] = useState<MovementDestination[]>([]);
-  const [destinations, setDestinations] = useState<MovementDestination[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [trucks, setTrucks] = useState<TruckType[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [assetsMaster, setAssetsMaster] = useState<AssetMaster[]>([]);
-  const [activeShifts, setActiveShifts] = useState<{driver_id: string, truck_id: string}[]>([]);
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [tripStops, setTripStops] = useState<TripStop[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState(''); 
   const [truckId, setTruckId] = useState('');
@@ -48,111 +49,38 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
   
   const [errors, setErrors] = useState<string[]>([]);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'alert'} | null>(null);
+  const [tripStops, setTripStops] = useState<TripStop[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchData = async () => {
-    if (!isSupabaseConfigured) {
-      setLocations(MOCK_LOCATIONS);
-      setOrigins(MOCK_LOCATIONS.map(l => ({
-        id: l.id,
-        name: l.name,
-        partner_type: l.partner_type,
-        display_name: `${l.name} (${l.partner_type})`,
-        sort_group: l.category === 'Home' ? 1 : (l.type === LocationType.IN_TRANSIT ? 3 : 2),
-        type: l.type,
-        category: l.category
-      })));
-      setDestinations(MOCK_LOCATIONS.map(l => ({
-        id: l.id,
-        name: l.name,
-        partner_type: l.partner_type,
-        display_name: `${l.name} (${l.partner_type})`,
-        type: l.type,
-        category: l.category
-      })));
-      setBatches(MOCK_BATCHES);
-      setTrucks(MOCK_TRUCKS);
-      setDrivers(MOCK_DRIVERS);
-      setAssetsMaster(MOCK_ASSETS);
-      setIsLoading(false);
-      return;
-    }
+  const origins = allSources;
+  const destinations = allSources;
 
-    setIsLoading(true);
-    try {
-      console.log('LogisticsOps: Fetching data...');
-      const [locsRes, originsRes, destsRes, batchesRes, trucksRes, driversRes, assetsRes, shiftsRes, tripsRes] = await Promise.all([
-        supabase.from('vw_all_sources').select('*'),
-        supabase.from('vw_all_origins').select('*'),
-        supabase.from('vw_movement_destinations').select('*'),
-        supabase.from('batches').select('*'),
-        supabase.from('trucks').select('*'),
-        supabase.from('drivers').select('*'),
-        supabase.from('asset_master').select('*'),
-        supabase.from('driver_shifts').select('driver_id, truck_id').is('end_time', null),
-        supabase.from('trips').select('*').in('status', ['Planned', 'In Progress'])
-      ]);
-
-      console.log('LogisticsOps Data Received:', {
-        sources: locsRes.data?.length,
-        origins: originsRes.data?.length,
-        destinations: destsRes.data?.length,
-        batches: batchesRes.data?.length,
-        trucks: trucksRes.data?.length,
-        drivers: driversRes.data?.length
-      });
-
-      if (originsRes.data) {
-        console.log('Origins Sample:', originsRes.data.slice(0, 3));
-        console.log('Origins Types:', [...new Set(originsRes.data.map(o => o.type))]);
-      }
-
-      if (shiftsRes.data) setActiveShifts(shiftsRes.data);
-      if (tripsRes.data) setTrips(tripsRes.data);
-      if (locsRes.data) {
-        const uniqueLocs = Array.from(new Map(locsRes.data.map(item => [item.id, item])).values());
-        setLocations(uniqueLocs as any);
-      }
-      if (originsRes.data) {
-        const uniqueOrigins = Array.from(new Map(originsRes.data.map(item => [item.id, item])).values());
-        setOrigins(uniqueOrigins);
-        if (uniqueOrigins.length > 0) {
-          setOrigin(uniqueOrigins[0].id);
-        }
-      }
-      if (destsRes.data) {
-        const uniqueDests = Array.from(new Map(destsRes.data.map(item => [item.id, item])).values());
-        setDestinations(uniqueDests);
-        if (uniqueDests.length > 0) {
-          setDestination(uniqueDests[0].id);
-        }
-      }
-      if (batchesRes.data) {
-        const uniqueBatches = Array.from(new Map(batchesRes.data.map(item => [item.id, item])).values());
-        setBatches(uniqueBatches);
-      }
-      if (trucksRes.data) {
-        setTrucks(trucksRes.data);
-        if (trucksRes.data.length > 0) setTruckId(trucksRes.data[0].id);
-      }
-      if (driversRes.data) {
-        setDrivers(driversRes.data);
-        if (driversRes.data.length > 0) setDriverId(driversRes.data[0].id);
-      }
-      if (assetsRes.data) {
-        setAssetsMaster(assetsRes.data);
-        if (assetsRes.data.length > 0) setAssets([{ assetId: assetsRes.data[0].id, quantity: 0 }]);
-      }
-    } catch (err) {
-      console.error("Error fetching logistics data:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const batchesByLocation = useMemo(() => {
+    const map: Record<string, Batch[]> = {};
+    batches.forEach(b => {
+      if (!map[b.current_location_id]) map[b.current_location_id] = [];
+      map[b.current_location_id].push(b);
+    });
+    return map;
+  }, [batches]);
 
   React.useEffect(() => {
-    fetchData();
-  }, []);
+    if (!isLoading && origins.length > 0 && !origin) {
+      setOrigin(origins[0].id);
+    }
+    if (!isLoading && destinations.length > 0 && !destination) {
+      setDestination(destinations[0].id);
+    }
+    if (!isLoading && trucks.length > 0 && !truckId) {
+      setTruckId(trucks[0].id);
+    }
+    if (!isLoading && drivers.length > 0 && !driverId) {
+      setDriverId(drivers[0].id);
+    }
+    if (!isLoading && assetsMaster.length > 0 && assets.length === 0) {
+      setAssets([{ assetId: assetsMaster[0].id, quantity: 0 }]);
+    }
+  }, [isLoading, origins, destinations, trucks, drivers, assetsMaster]);
 
   React.useEffect(() => {
     if (initialCollectionRequest && locations.length > 0) {
@@ -412,7 +340,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
       }
       setThaanFile(null);
       setRouteInstructions('');
-      fetchData(); // Refresh data
+      refreshAll(); // Refresh data
     } catch (err: any) {
       console.error("Movement capture error:", err);
       setNotification({ message: err.message || "Failed to record movement.", type: 'alert' });
@@ -568,7 +496,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                 </div>
                 <div className="space-y-3">
                   {assets.map((a, idx) => {
-                    const availableBatches = batches.filter(b => b.current_location_id === origin);
+                    const availableBatches = batchesByLocation[origin] || [];
                     return (
                       <div key={idx} className="flex flex-col gap-2">
                         <div className="flex gap-3">
