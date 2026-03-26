@@ -1,16 +1,18 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Truck, MapPin, Calendar, Plus, ChevronRight, CheckCircle2, Clock, User, Navigation, AlertCircle, Loader2, Save, Trash2, ArrowRight, ArrowUp, ArrowDown, Edit } from 'lucide-react';
+import { Truck, MapPin, Calendar, Plus, ChevronRight, CheckCircle2, Clock, User, Navigation, AlertCircle, Loader2, Save, Trash2, ArrowRight, ArrowUp, ArrowDown, Edit, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Trip, TripStop, Driver, Truck as TruckType, Source } from '../types';
 import { useMasterData } from '../MasterDataContext';
 
-const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; locations: Source[] }> = ({ startLocationId, stops, locations }) => {
+const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; locations: any[] }> = ({ startLocationId, stops, locations }) => {
   const [totalKm, setTotalKm] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const lastCalculationRef = useRef<string>('');
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    let isCancelled = false;
     const calculateDistance = async () => {
       if (!startLocationId || stops.length === 0) {
         setTotalKm(null);
@@ -22,24 +24,32 @@ const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; 
       if (calculationKey === lastCalculationRef.current) return;
       lastCalculationRef.current = calculationKey;
 
+      // Cancel previous calculation if any
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
       setIsCalculating(true);
       try {
         const startLoc = locations.find(l => l.id === startLocationId);
         if (!startLoc?.address) {
-          setTotalKm(null);
+          if (!isCancelled) setTotalKm(null);
           return;
         }
 
         // Helper to get coordinates from address (Nominatim)
         const getCoords = async (address: string) => {
           try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`);
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`, {
+              signal: abortControllerRef.current?.signal
+            });
             const data = await res.json();
             if (data && data[0]) {
               return { lat: data[0].lat, lon: data[0].lon };
             }
-          } catch (e) {
-            console.error("Geocoding error:", e);
+          } catch (e: any) {
+            if (e.name !== 'AbortError') console.error("Geocoding error:", e);
           }
           return null;
         };
@@ -49,11 +59,12 @@ const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; 
 
         if (!currentOriginCoords) {
           // Fallback: simple estimation if geocoding fails
-          setTotalKm(stops.length * 15); // Rough guess: 15km per stop
+          if (!isCancelled) setTotalKm(stops.length * 15); // Rough guess: 15km per stop
           return;
         }
 
         for (const stop of stops) {
+          if (isCancelled) break;
           const destLoc = locations.find(l => l.id === stop.location_id);
           if (!destLoc?.address) continue;
 
@@ -61,14 +72,21 @@ const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; 
           if (!destCoords) continue;
 
           // OSRM Routing API (Free)
-          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${currentOriginCoords.lon},${currentOriginCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`;
-          const routeRes = await fetch(osrmUrl);
-          const routeData = await routeRes.json();
+          try {
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${currentOriginCoords.lon},${currentOriginCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`;
+            const routeRes = await fetch(osrmUrl, {
+              signal: abortControllerRef.current?.signal
+            });
+            const routeData = await routeRes.json();
 
-          if (routeData.routes?.[0]?.distance) {
-            totalDistance += routeData.routes[0].distance;
-            currentOriginCoords = destCoords;
-          } else {
+            if (routeData.routes?.[0]?.distance) {
+              totalDistance += routeData.routes[0].distance;
+              currentOriginCoords = destCoords;
+            } else {
+              throw new Error("No route found");
+            }
+          } catch (e: any) {
+            if (e.name === 'AbortError') break;
             // Fallback to Haversine if OSRM fails
             const R = 6371e3; // metres
             const φ1 = (parseFloat(currentOriginCoords.lat) * Math.PI) / 180;
@@ -90,15 +108,22 @@ const DistanceEstimator: React.FC<{ startLocationId: string; stops: TripStop[]; 
           await new Promise(r => setTimeout(r, 1000));
         }
 
-        setTotalKm(totalDistance / 1000);
-      } catch (err) {
-        console.error("Error calculating total distance:", err);
+        if (!isCancelled) setTotalKm(totalDistance / 1000);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') console.error("Error calculating total distance:", err);
       } finally {
-        setIsCalculating(false);
+        if (!isCancelled) setIsCalculating(false);
       }
     };
 
     calculateDistance();
+
+    return () => {
+      isCancelled = true;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [startLocationId, stops, locations]);
 
   if (!startLocationId || stops.length === 0) return null;
@@ -127,6 +152,7 @@ const TripManagement: React.FC = () => {
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [tripStops, setTripStops] = useState<TripStop[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isAddingStop, setIsAddingStop] = useState(false);
 
   const generateTripId = () => `TRIP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 10000)}`;
 
@@ -186,6 +212,9 @@ const TripManagement: React.FC = () => {
   };
 
   const handleAddStop = async (tripId: string, locationId: string) => {
+    if (!locationId) return;
+    setIsAddingStop(true);
+    setError(null);
     const nextSeq = tripStops.length + 1;
     try {
       const { error } = await supabase.from('trip_stops').insert([{
@@ -195,9 +224,12 @@ const TripManagement: React.FC = () => {
         status: 'Pending'
       }]);
       if (error) throw error;
-      fetchTripStops(tripId);
-    } catch (err) {
+      await fetchTripStops(tripId);
+    } catch (err: any) {
       console.error("Error adding stop:", err);
+      setError(err.message || "Failed to add stop. Please try again.");
+    } finally {
+      setIsAddingStop(false);
     }
   };
 
@@ -570,11 +602,12 @@ const TripManagement: React.FC = () => {
                     Print Route Sheet
                   </button>
                   <select 
-                    className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
                     onChange={(e) => handleAddStop(selectedTrip.id, e.target.value)}
                     value=""
+                    disabled={isAddingStop}
                   >
-                    <option value="" disabled>+ Add Stop</option>
+                    <option value="" disabled>{isAddingStop ? 'Adding...' : '+ Add Stop'}</option>
                     {locations.map(loc => (
                       <option key={loc.id} value={loc.id}>{loc.display_name}</option>
                     ))}
@@ -817,7 +850,7 @@ const TripManagement: React.FC = () => {
           <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-8 border-b border-slate-100 flex justify-between items-center">
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">Edit Trip Details</h3>
-              <button onClick={() => setShowEditTripModal(false)} className="text-slate-400 hover:text-slate-600"><Trash2 size={24} /></button>
+              <button onClick={() => setShowEditTripModal(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
             </div>
             <div className="p-8 space-y-6">
               {error && (
