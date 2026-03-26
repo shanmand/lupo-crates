@@ -152,7 +152,7 @@ const AppContent: React.FC = () => {
       case NavItem.PAYMENT_SETTLEMENT: return <PaymentSettlement currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
       case NavItem.ASSETS: return <AssetList currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} isAdmin={profile?.role_name === UserRole.ADMIN} />;
       case NavItem.TRACKER: return <BatchTracker selectedBranchId={dbBranches.find(b => b.name === currentBranchContext)?.id} />;
-      case NavItem.LOGISTICS: return <LogisticsOps currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} initialCollectionRequest={pendingAssignment || undefined} />;
+      case NavItem.LOGISTICS: return <LogisticsOps currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} initialCollectionRequest={pendingAssignment || undefined} onNavigate={(tab) => setActiveTab(tab as NavItem)} />;
       case NavItem.COLLECTION_REQUESTS: return (
         <CollectionRequests 
           currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} 

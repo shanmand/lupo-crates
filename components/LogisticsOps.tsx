@@ -8,6 +8,7 @@ import { normalizePayload, castId } from '../supabaseUtils';
 
 interface LogisticsOpsProps {
   currentUser: UserType;
+  onNavigate?: (tab: any) => void;
   initialCollectionRequest?: {
     customerId: string;
     assetId: string;
@@ -16,7 +17,7 @@ interface LogisticsOpsProps {
   };
 }
 
-const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollectionRequest }) => {
+const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, initialCollectionRequest }) => {
   const isReadOnly = currentUser.role === UserRole.EXECUTIVE;
   
   const [locations, setLocations] = useState<Location[]>([]);
@@ -500,6 +501,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, initialCollect
                       </option>
                     ))}
                   </select>
+                  {tripStops.length === 0 && selectedTripId && (
+                    <p className="text-[10px] text-amber-600 font-bold uppercase mt-1">
+                      Add stops in <span className="underline cursor-pointer" onClick={() => onNavigate?.('trip-management')}>Trip Planning</span> to continue.
+                    </p>
+                  )}
                 </label>
               </div>
 
