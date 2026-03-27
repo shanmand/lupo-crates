@@ -154,7 +154,7 @@ const TripManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isAddingStop, setIsAddingStop] = useState(false);
 
-  const generateTripId = () => `TRIP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 10000)}`;
+  const generateTripId = () => crypto.randomUUID();
 
   // New Trip Form State
   const [newTrip, setNewTrip] = useState({
@@ -176,7 +176,22 @@ const TripManagement: React.FC = () => {
     console.log('TripManagement: locations data:', locations);
   }, [locations]);
 
+  const isUUID = (str: string) => {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return regex.test(str);
+  };
+
   const fetchTripStops = async (tripId: string) => {
+    if (!isSupabaseConfigured) return;
+    
+    // If the database expects a UUID but we have an old string ID, 
+    // we should skip the fetch to avoid the 400 error.
+    if (!isUUID(tripId)) {
+      console.warn('Trip ID is not a valid UUID, skipping stops fetch:', tripId);
+      setTripStops([]);
+      return;
+    }
+
     console.log('Fetching stops for trip:', tripId);
     try {
       const { data, error } = await supabase
@@ -187,7 +202,13 @@ const TripManagement: React.FC = () => {
       
       if (error) {
         console.error('Error fetching trip stops:', error);
-        setError(error.message);
+        // If it's a UUID error, we know why
+        if (error.code === '22P02') {
+          setError("This trip has an incompatible ID format. Please create a new trip.");
+        } else {
+          setError(error.message);
+        }
+        setTripStops([]);
         return;
       }
       
@@ -196,6 +217,7 @@ const TripManagement: React.FC = () => {
     } catch (err: any) {
       console.error('Unexpected error fetching stops:', err);
       setError(err.message);
+      setTripStops([]);
     }
   };
 
@@ -208,7 +230,7 @@ const TripManagement: React.FC = () => {
       
       setShowNewTripModal(false);
       setNewTrip({
-        id: generateTripId(),
+        id: crypto.randomUUID(),
         driver_id: '',
         truck_id: '',
         start_location_id: '',
@@ -234,6 +256,12 @@ const TripManagement: React.FC = () => {
       setError("Supabase is not configured. Please check your environment variables.");
       return;
     }
+
+    if (!isUUID(tripId)) {
+      setError("This trip was created with an old ID format and cannot have stops added. Please create a new trip.");
+      return;
+    }
+
     console.log('Adding stop:', { tripId, locationId });
     setIsAddingStop(true);
     setError(null);
@@ -248,13 +276,14 @@ const TripManagement: React.FC = () => {
       
       if (error) {
         console.error('Supabase insert error:', error);
+        if (error.code === '22P02') {
+          throw new Error("This trip has an incompatible ID format. Please create a new trip.");
+        }
         throw error;
       }
       
       console.log('Stop added successfully, refetching...');
       await fetchTripStops(tripId);
-      // Optional: Add a brief success indicator if needed, 
-      // but the stop appearing in the list is usually enough.
     } catch (err: any) {
       console.error("Error adding stop:", err);
       setError(err.message || "Failed to add stop. Please try again.");
