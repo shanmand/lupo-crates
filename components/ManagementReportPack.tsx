@@ -65,7 +65,7 @@ const ManagementReportPack: React.FC = () => {
         branchesRes,
         expensesRes
       ] = await Promise.all([
-        supabase.from('vw_management_kpis').select('*').single(),
+        supabase.from('vw_management_kpis').select('*').maybeSingle(),
         supabase.from('vw_location_unconfirmed_value').select('*'),
         supabase.from('vw_batch_accruals').select('*'),
         supabase.from('trucks').select('*'),
@@ -75,6 +75,9 @@ const ManagementReportPack: React.FC = () => {
         supabase.from('branches').select('*'),
         supabase.from('vw_branch_fleet_expenses').select('*')
       ]);
+
+      if (kpisRes.error) console.warn("KPIs View not found or error:", kpisRes.error);
+      if (budgetsRes.error) console.warn("Budgets Table not found or error:", budgetsRes.error);
 
       if (kpisRes.data) setKpis(kpisRes.data);
       if (unconfirmedRes.data) setUnconfirmedValue(unconfirmedRes.data);
@@ -250,10 +253,10 @@ const ManagementReportPack: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl">
+          <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl w-full overflow-hidden">
             <h4 className="font-black text-sm uppercase tracking-widest text-slate-900 mb-8">Revenue vs Budget by Branch</h4>
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <div className="h-[400px] w-full relative">
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={branches.map(b => {
                   const branchBudget = budgets.find(bud => bud.branch_id === b.id);
                   const branchAccruals = accruals.filter(a => a.branch_id === b.id);
@@ -374,10 +377,10 @@ const ManagementReportPack: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl">
+          <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl w-full overflow-hidden">
             <h4 className="font-black text-sm uppercase tracking-widest text-slate-900 mb-8">Location Value Heatmap (Unconfirmed)</h4>
-            <div className="h-[350px]">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <div className="h-[350px] w-full relative">
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={unconfirmedValue.sort((a, b) => b.estimated_value_zar - a.estimated_value_zar).slice(0, 8)}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="location_name" axisLine={false} tickLine={false} tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} />

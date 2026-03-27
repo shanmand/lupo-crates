@@ -78,29 +78,10 @@ DROP VIEW IF EXISTS public.vw_management_kpis;
 -- Update vw_management_kpis to support the Management Report Pack UI
 DROP VIEW IF EXISTS public.vw_management_kpis CASCADE;
 CREATE OR REPLACE VIEW public.vw_management_kpis AS
-WITH batch_stats AS (
-    SELECT 
-        AVG(EXTRACT(DAY FROM (confirmation_date::timestamp - transaction_date::timestamp))) FILTER (WHERE transfer_confirmed_by_customer = true) as avg_cycle_time,
-        COUNT(*) as total_batches,
-        SUM(quantity) as total_units
-    FROM public.batches
-),
-shrinkage_stats AS (
-    SELECT 
-        (SUM(ABS(variance))::float / NULLIF(SUM(system_quantity), 0)) * 100 as shrinkage_rate
-    FROM public.stock_take_items
-),
-financial_stats AS (
-    SELECT 
-        SUM(amount) as total_compliance_cost
-    FROM public.vw_branch_fleet_expenses
-    WHERE expense_date >= date_trunc('month', current_date)
-)
 SELECT 
-    COALESCE(bs.avg_cycle_time, 0) as crate_cycle_time,
-    COALESCE(ss.shrinkage_rate, 0) as shrinkage_rate,
-    COALESCE(fs.total_compliance_cost, 0) as monthly_compliance_cost
-FROM batch_stats bs, shrinkage_stats ss, financial_stats fs;
+    COALESCE((SELECT AVG(EXTRACT(DAY FROM (confirmation_date::timestamp - transaction_date::timestamp))) FILTER (WHERE transfer_confirmed_by_customer = true) FROM public.batches), 0) as crate_cycle_time,
+    COALESCE((SELECT (SUM(ABS(variance))::float / NULLIF(SUM(system_quantity), 0)) * 100 FROM public.stock_take_items), 0) as shrinkage_rate,
+    COALESCE((SELECT SUM(amount) FROM public.vw_branch_fleet_expenses WHERE expense_date >= date_trunc('month', current_date)), 0) as monthly_compliance_cost;
 
 -- 4. Ensure RPCs handle TEXT IDs correctly
 -- (The existing split_batch and process_stock_take already use TEXT/UUID correctly in schema.sql)
@@ -770,5 +751,27 @@ SELECT
     'BusinessParty' as source_table
 FROM public.business_parties;
 
--- Add start_location_id to trips
-ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS start_location_id TEXT;
+-- 21. Branch Budgets Table
+CREATE TABLE IF NOT EXISTS public.branch_budgets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    branch_id TEXT REFERENCES public.branches(id),
+    budget_amount NUMERIC NOT NULL DEFAULT 0,
+    budget_month DATE NOT NULL DEFAULT date_trunc('month', current_date),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.branch_budgets ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+DROP POLICY IF EXISTS "Allow all to authenticated" ON public.branch_budgets;
+CREATE POLICY "Allow all to authenticated" ON public.branch_budgets FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all to anon" ON public.branch_budgets;
+CREATE POLICY "Allow all to anon" ON public.branch_budgets FOR ALL TO anon USING (true) WITH CHECK (true);
+
+-- Seed Budgets
+INSERT INTO public.branch_budgets (branch_id, budget_amount) VALUES
+('BR-01', 250000),
+('BR-02', 180000)
+ON CONFLICT DO NOTHING;

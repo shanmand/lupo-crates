@@ -323,6 +323,14 @@ CREATE TABLE public.vehicle_inspections (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE public.branch_budgets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    branch_id TEXT REFERENCES public.branches(id),
+    budget_amount NUMERIC NOT NULL DEFAULT 0,
+    budget_month DATE NOT NULL DEFAULT date_trunc('month', current_date),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE public.driver_shifts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     driver_id TEXT REFERENCES public.drivers(id),
@@ -1113,29 +1121,10 @@ LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id;
 -- MANAGEMENT KPIS
 DROP VIEW IF EXISTS public.vw_management_kpis CASCADE;
 CREATE OR REPLACE VIEW public.vw_management_kpis AS
-WITH batch_stats AS (
-    SELECT 
-        AVG(EXTRACT(DAY FROM (confirmation_date::timestamp - transaction_date::timestamp))) FILTER (WHERE transfer_confirmed_by_customer = true) as avg_cycle_time,
-        COUNT(*) as total_batches,
-        SUM(quantity) as total_units
-    FROM public.batches
-),
-shrinkage_stats AS (
-    SELECT 
-        (SUM(ABS(variance))::float / NULLIF(SUM(system_quantity), 0)) * 100 as shrinkage_rate
-    FROM public.stock_take_items
-),
-financial_stats AS (
-    SELECT 
-        SUM(amount) as total_compliance_cost
-    FROM public.vw_branch_fleet_expenses
-    WHERE expense_date >= date_trunc('month', current_date)
-)
 SELECT 
-    COALESCE(bs.avg_cycle_time, 0) as crate_cycle_time,
-    COALESCE(ss.shrinkage_rate, 0) as shrinkage_rate,
-    COALESCE(fs.total_compliance_cost, 0) as monthly_compliance_cost
-FROM batch_stats bs, shrinkage_stats ss, financial_stats fs;
+    COALESCE((SELECT AVG(EXTRACT(DAY FROM (confirmation_date::timestamp - transaction_date::timestamp))) FILTER (WHERE transfer_confirmed_by_customer = true) FROM public.batches), 0) as crate_cycle_time,
+    COALESCE((SELECT (SUM(ABS(variance))::float / NULLIF(SUM(system_quantity), 0)) * 100 FROM public.stock_take_items), 0) as shrinkage_rate,
+    COALESCE((SELECT SUM(amount) FROM public.vw_branch_fleet_expenses WHERE expense_date >= date_trunc('month', current_date)), 0) as monthly_compliance_cost;
 
 -- OPERATIONAL TRIP AUDIT
 DROP VIEW IF EXISTS public.vw_operational_trip_audit CASCADE;
@@ -1348,6 +1337,11 @@ INSERT INTO public.asset_master (id, name, type, dimensions, material) VALUES
 ('SH-001', 'Lupo Premium Crate', 'Crate', '600x400x150mm', 'HDPE-Amber')
 ON CONFLICT DO NOTHING;
 
+INSERT INTO public.branch_budgets (branch_id, budget_amount) VALUES
+('BR-01', 250000),
+('BR-02', 180000)
+ON CONFLICT DO NOTHING;
+
 INSERT INTO public.fee_schedule (asset_id, fee_type, amount_zar, effective_from) VALUES 
 ('CRT-STD', 'Replacement Fee', 150.00, '2024-01-01'),
 ('PLT-STD', 'Replacement Fee', 450.00, '2024-01-01'),
@@ -1400,6 +1394,7 @@ CREATE POLICY "Allow all to authenticated" ON public.claims FOR ALL TO authentic
 CREATE POLICY "Allow all to authenticated" ON public.claim_audits FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.audit_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.vehicle_inspections FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all to authenticated" ON public.branch_budgets FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.driver_shifts FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.truck_roadworthy_history FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
@@ -1421,6 +1416,7 @@ CREATE POLICY "Allow all to anon" ON public.claims FOR ALL TO anon USING (true) 
 CREATE POLICY "Allow all to anon" ON public.claim_audits FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.audit_logs FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.vehicle_inspections FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all to anon" ON public.branch_budgets FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.driver_shifts FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.truck_roadworthy_history FOR ALL TO anon USING (true) WITH CHECK (true);
 
