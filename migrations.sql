@@ -4,9 +4,26 @@
 -- 0. Add missing quantity column to batch_movements
 ALTER TABLE public.batch_movements ADD COLUMN IF NOT EXISTS quantity INTEGER;
 
+-- Add license_doc_url to trucks and drivers
+ALTER TABLE public.trucks ADD COLUMN IF NOT EXISTS license_doc_url TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS license_doc_url TEXT;
+
 -- Add manual_end_time and notes to driver_shifts
 ALTER TABLE public.driver_shifts ADD COLUMN IF NOT EXISTS manual_end_time TIMESTAMPTZ;
 ALTER TABLE public.driver_shifts ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- Create truck_roadworthy_history if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.truck_roadworthy_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    truck_id TEXT REFERENCES public.trucks(id),
+    test_date DATE NOT NULL,
+    expiry_date DATE NOT NULL,
+    test_fee_zar NUMERIC DEFAULT 0,
+    repair_costs_zar NUMERIC DEFAULT 0,
+    result TEXT, -- Pass, Fail
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- 1. Master Logistics Trace View
 DROP VIEW IF EXISTS public.vw_master_logistics_trace;
@@ -720,7 +737,7 @@ ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS end_odometer INTEGER;
 ALTER TABLE public.locations ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE public.business_parties ADD COLUMN IF NOT EXISTS address TEXT;
 
--- Update vw_all_sources to include address
+-- Update vw_all_sources to include address and source_table
 DROP VIEW IF EXISTS public.vw_all_sources CASCADE;
 CREATE OR REPLACE VIEW public.vw_all_sources AS
 SELECT 
@@ -736,7 +753,8 @@ SELECT
         WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
         WHEN type = 'In Transit' THEN 3
         ELSE 2 
-    END as sort_group
+    END as sort_group,
+    'Location' as source_table
 FROM public.locations
 UNION ALL
 SELECT 
@@ -748,7 +766,8 @@ SELECT
     'External' as category,
     address,
     name || ' (' || party_type || ')' as display_name,
-    2 as sort_group
+    2 as sort_group,
+    'BusinessParty' as source_table
 FROM public.business_parties;
 
 -- Add start_location_id to trips

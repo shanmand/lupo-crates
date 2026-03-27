@@ -253,7 +253,7 @@ const ManagementReportPack: React.FC = () => {
           <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl">
             <h4 className="font-black text-sm uppercase tracking-widest text-slate-900 mb-8">Revenue vs Budget by Branch</h4>
             <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <BarChart data={branches.map(b => {
                   const branchBudget = budgets.find(bud => bud.branch_id === b.id);
                   const branchAccruals = accruals.filter(a => a.branch_id === b.id);
@@ -377,7 +377,7 @@ const ManagementReportPack: React.FC = () => {
           <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl">
             <h4 className="font-black text-sm uppercase tracking-widest text-slate-900 mb-8">Location Value Heatmap (Unconfirmed)</h4>
             <div className="h-[350px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <BarChart data={unconfirmedValue.sort((a, b) => b.estimated_value_zar - a.estimated_value_zar).slice(0, 8)}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="location_name" axisLine={false} tickLine={false} tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} />

@@ -177,13 +177,26 @@ const TripManagement: React.FC = () => {
   }, [locations]);
 
   const fetchTripStops = async (tripId: string) => {
-    const { data, error } = await supabase
-      .from('trip_stops')
-      .select('*')
-      .eq('trip_id', tripId)
-      .order('sequence_number', { ascending: true });
-    
-    if (data) setTripStops(data);
+    console.log('Fetching stops for trip:', tripId);
+    try {
+      const { data, error } = await supabase
+        .from('trip_stops')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('sequence_number', { ascending: true });
+      
+      if (error) {
+        console.error('Error fetching trip stops:', error);
+        setError(error.message);
+        return;
+      }
+      
+      console.log('Fetched stops:', data);
+      if (data) setTripStops(data);
+    } catch (err: any) {
+      console.error('Unexpected error fetching stops:', err);
+      setError(err.message);
+    }
   };
 
   const handleCreateTrip = async () => {
@@ -217,6 +230,11 @@ const TripManagement: React.FC = () => {
 
   const handleAddStop = async (tripId: string, locationId: string) => {
     if (!locationId) return;
+    if (!isSupabaseConfigured) {
+      setError("Supabase is not configured. Please check your environment variables.");
+      return;
+    }
+    console.log('Adding stop:', { tripId, locationId });
     setIsAddingStop(true);
     setError(null);
     const nextSeq = tripStops.length + 1;
@@ -227,8 +245,16 @@ const TripManagement: React.FC = () => {
         sequence_number: nextSeq,
         status: 'Pending'
       }]);
-      if (error) throw error;
+      
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
+      
+      console.log('Stop added successfully, refetching...');
       await fetchTripStops(tripId);
+      // Optional: Add a brief success indicator if needed, 
+      // but the stop appearing in the list is usually enough.
     } catch (err: any) {
       console.error("Error adding stop:", err);
       setError(err.message || "Failed to add stop. Please try again.");
@@ -607,7 +633,10 @@ const TripManagement: React.FC = () => {
                   </button>
                   <select 
                     className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
-                    onChange={(e) => handleAddStop(selectedTrip.id, e.target.value)}
+                    onChange={(e) => {
+                      console.log('Select onChange triggered with value:', e.target.value);
+                      handleAddStop(selectedTrip.id, e.target.value);
+                    }}
                     value=""
                     disabled={isAddingStop}
                   >
@@ -620,6 +649,18 @@ const TripManagement: React.FC = () => {
               </div>
 
               <div className="flex-1 p-8 overflow-y-auto">
+                {error && !showNewTripModal && !showEditTripModal && (
+                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle size={18} />
+                    <div className="flex-1">{error}</div>
+                    <button 
+                      onClick={() => setError(null)}
+                      className="p-1 hover:bg-red-100 rounded-lg transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
                 <div className="space-y-6 relative">
                   {/* Vertical Line */}
                   <div className="absolute left-[21px] top-4 bottom-4 w-0.5 bg-slate-100" />
