@@ -1029,15 +1029,17 @@ LEFT JOIN forensics f ON m.branch_id = f.branch_id;
 -- INVENTORY MAP DATA
 CREATE OR REPLACE VIEW public.vw_inventory_map_data AS
 SELECT 
-    s.id as location_id,
-    s.name as location_name,
+    s.id as id,
+    s.name as name,
     s.latitude,
     s.longitude,
-    SUM(b.quantity) as total_units,
+    s.type,
+    s.branch_id,
+    SUM(b.quantity) as total_assets,
     COUNT(DISTINCT b.asset_id) as asset_types
 FROM public.batches b
 JOIN public.vw_all_sources s ON b.current_location_id = s.id
-GROUP BY s.id, s.name, s.latitude, s.longitude;
+GROUP BY s.id, s.name, s.latitude, s.longitude, s.type, s.branch_id;
 
 -- ASSIGNABLE PERSONNEL
 CREATE OR REPLACE VIEW public.vw_assignable_personnel AS
@@ -1090,11 +1092,13 @@ SELECT
     b.id AS batch_id,
     b.asset_id,
     a.name AS asset_name,
+    a.supplier_id,
     b.quantity,
     b.current_location_id,
     s.name AS current_location,
     s.branch_id,
     b.status AS batch_status,
+    b.is_settled,
     b.transaction_date,
     public.calculate_batch_accrual(b.id) AS daily_accrued_liability,
     (CURRENT_DATE - b.transaction_date) AS days_in_circulation
@@ -1420,5 +1424,19 @@ CREATE POLICY "Allow all to anon" ON public.branch_budgets FOR ALL TO anon USING
 CREATE POLICY "Allow all to anon" ON public.driver_shifts FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.truck_roadworthy_history FOR ALL TO anon USING (true) WITH CHECK (true);
 
--- Refresh Cache
+-- REFRESH CACHE
 NOTIFY pgrst, 'reload schema';
+
+-- 23. Supplier Asset Audit View
+DROP VIEW IF EXISTS public.vw_supplier_asset_audit CASCADE;
+CREATE OR REPLACE VIEW public.vw_supplier_asset_audit AS
+SELECT 
+    b.id as batch_id,
+    s.name as location_name,
+    am.name as asset_name,
+    b.quantity,
+    (CURRENT_DATE - b.transaction_date)::INTEGER as days_aged,
+    public.calculate_batch_accrual(b.id) as zar_liability
+FROM public.batches b
+JOIN public.vw_all_sources s ON b.current_location_id = s.id
+JOIN public.asset_master am ON b.asset_id = am.id;
