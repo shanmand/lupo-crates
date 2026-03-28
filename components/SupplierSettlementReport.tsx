@@ -150,8 +150,8 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const matchesDate = (!start || batchDate >= start) &&
                            (!end || batchDate <= end);
 
-        // Logic: External Assets at External Locations are removed from our account
-        const isOurAccount = !(asset?.ownership_type === 'External' && loc?.category === 'External');
+        // Logic: External Assets at Returning locations (Supplier Yard) are removed from our account
+        const isOurAccount = !(asset?.ownership_type === 'External' && loc?.type === LocationType.RETURNING);
 
         return !!fee && matchesBranch && matchesSupplier && matchesDate && isOurAccount;
     }).map(b => {

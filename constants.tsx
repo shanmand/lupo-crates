@@ -20,11 +20,11 @@ export const MOCK_USERS: User[] = [
 ];
 
 export const MOCK_ASSETS: AssetMaster[] = [
-  { id: 'SH-001', name: 'Lupo Standard Bread Crate', type: AssetType.CRATE, dimensions: '600x400x150mm', material: 'HDPE-Amber', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL },
-  { id: 'SH-002', name: 'Lupo Confectionery Tray', type: AssetType.CRATE, dimensions: '600x400x90mm', material: 'HDPE-Clear', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL },
-  { id: 'SH-003', name: 'Lupo Roll Crate (Deep)', type: AssetType.CRATE, dimensions: '600x400x210mm', material: 'HDPE-Blue', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL },
-  { id: 'SH-P01', name: 'Heavy Duty Flour Pallet', type: AssetType.PALLET, dimensions: '1200x1000mm', material: 'Reinforced Pine', billing_model: BillingModel.ISSUE_FEE, ownership_type: OwnershipType.EXTERNAL },
-  { id: 'SH-P02', name: 'Lupo Export Euro Pallet', type: AssetType.PALLET, dimensions: '1200x800mm', material: 'Heat-Treated Wood', billing_model: BillingModel.ISSUE_FEE, ownership_type: OwnershipType.EXTERNAL },
+  { id: 'SH-001', name: 'Lupo Standard Bread Crate', type: AssetType.CRATE, dimensions: '600x400x150mm', material: 'HDPE-Amber', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'LOC-SUP-01' },
+  { id: 'SH-002', name: 'Lupo Confectionery Tray', type: AssetType.CRATE, dimensions: '600x400x90mm', material: 'HDPE-Clear', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'BP-SUP-001' },
+  { id: 'SH-003', name: 'Lupo Roll Crate (Deep)', type: AssetType.CRATE, dimensions: '600x400x210mm', material: 'HDPE-Blue', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'LOC-SUP-01' },
+  { id: 'SH-P01', name: 'Heavy Duty Flour Pallet', type: AssetType.PALLET, dimensions: '1200x1000mm', material: 'Reinforced Pine', billing_model: BillingModel.ISSUE_FEE, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'BP-SUP-001' },
+  { id: 'SH-P02', name: 'Lupo Export Euro Pallet', type: AssetType.PALLET, dimensions: '1200x800mm', material: 'Heat-Treated Wood', billing_model: BillingModel.ISSUE_FEE, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'LOC-SUP-01' },
 ];
 
 export const MOCK_LOCATIONS: Location[] = [
@@ -37,6 +37,7 @@ export const MOCK_LOCATIONS: Location[] = [
   { id: 'LOC-TRANS-01', name: 'Truck GP 22 SH (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL, branch_id: 'BR-01' },
   { id: 'LOC-TRANS-02', name: 'Truck CA 99 LU (Lupo)', type: LocationType.IN_TRANSIT, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL, branch_id: 'BR-01' },
   { id: 'LOC-SUP-01', name: 'SHUKU Asset Recovery Yard', type: LocationType.RETURNING, category: LocationCategory.EXTERNAL, partner_type: PartnerType.SUPPLIER, branch_id: 'BR-01' },
+  { id: 'BP-SUP-001', name: 'Crate Manufacturers Ltd', type: LocationType.RETURNING, category: LocationCategory.EXTERNAL, partner_type: PartnerType.SUPPLIER, branch_id: 'BR-01' },
   { id: 'LOC-COLD-01', name: 'Lupo Frozen Vault A', type: LocationType.COLD_STORAGE, category: LocationCategory.EXTERNAL, partner_type: PartnerType.INTERNAL, branch_id: 'BR-01' },
 ];
 

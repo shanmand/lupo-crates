@@ -1335,10 +1335,10 @@ INSERT INTO public.locations (id, name, type, category, branch_id, partner_type,
 ('LOC-SUP-01', 'Crate Suppliers', 'Supplier', 'External', 'BR-01', 'Supplier', -26.1500, 28.2000)
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.asset_master (id, name, type, dimensions, material) VALUES 
-('CRT-STD', 'Standard Bread Crate', 'Crate', '600x400x150mm', 'HDPE'),
-('PLT-STD', 'Standard Wood Pallet', 'Pallet', '1200x1000mm', 'Wood'),
-('SH-001', 'Lupo Premium Crate', 'Crate', '600x400x150mm', 'HDPE-Amber')
+INSERT INTO public.asset_master (id, name, type, dimensions, material, supplier_id) VALUES 
+('CRT-STD', 'Standard Bread Crate', 'Crate', '600x400x150mm', 'HDPE', 'BP-SUP-001'),
+('PLT-STD', 'Standard Wood Pallet', 'Pallet', '1200x1000mm', 'Wood', 'BP-SUP-001'),
+('SH-001', 'Lupo Premium Crate', 'Crate', '600x400x150mm', 'HDPE-Amber', 'LOC-SUP-01')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.branch_budgets (branch_id, budget_amount) VALUES
@@ -1348,15 +1348,18 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO public.fee_schedule (asset_id, fee_type, amount_zar, effective_from) VALUES 
 ('CRT-STD', 'Replacement Fee', 150.00, '2024-01-01'),
+('CRT-STD', 'Daily Rental (Supermarket)', 4.50, '2024-01-01'),
+('PLT-STD', 'Daily Rental (Supermarket)', 12.00, '2024-01-01'),
+('SH-001', 'Daily Rental (Supermarket)', 5.25, '2024-01-01');
 ('PLT-STD', 'Replacement Fee', 450.00, '2024-01-01'),
 ('SH-001', 'Replacement Fee', 180.00, '2024-01-01')
 ON CONFLICT DO NOTHING;
 
 -- INITIAL INVENTORY
-INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status) VALUES 
-('BAT-INIT-001', 'CRT-STD', 5000, 'WH-001', 'Success'),
-('BAT-INIT-002', 'PLT-STD', 200, 'WH-001', 'Success'),
-('BAT-INIT-003', 'SH-001', 1000, 'LOC-JHB-01', 'Success')
+INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date) VALUES 
+('BAT-INIT-001', 'CRT-STD', 5000, 'WH-001', 'Success', CURRENT_DATE - INTERVAL '45 days'),
+('BAT-INIT-002', 'PLT-STD', 200, 'WH-001', 'Success', CURRENT_DATE - INTERVAL '30 days'),
+('BAT-INIT-003', 'SH-001', 1000, 'LOC-JHB-01', 'Success', CURRENT_DATE - INTERVAL '15 days')
 ON CONFLICT DO NOTHING;
 
 -- 7. RLS POLICIES
