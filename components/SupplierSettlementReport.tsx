@@ -50,7 +50,6 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
   const [movements, setMovements] = useState<BatchMovement[]>([]);
   const [thaans, setThaans] = useState<ThaanSlip[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [auditRecords, setAuditRecords] = useState<any[]>([]);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
@@ -93,7 +92,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
 
       setIsLoading(true);
       try {
-        const [bRes, fRes, lRes, cRes, aRes, locRes, mRes, tRes, brRes, auditRes] = await Promise.all([
+        const [bRes, fRes, lRes, cRes, aRes, locRes, mRes, tRes, brRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('asset_losses').select('*'),
@@ -102,8 +101,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
           supabase.from('vw_all_sources').select('*'),
           supabase.from('batch_movements').select('*'),
           supabase.from('thaan_slips').select('*'),
-          supabase.from('branches').select('*'),
-          supabase.from('vw_supplier_asset_audit').select('*')
+          supabase.from('branches').select('*')
         ]);
 
         if (bRes.data) setBatches(bRes.data);
@@ -114,7 +112,6 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         if (locRes.data) setLocations(locRes.data);
         if (mRes.data) setMovements(mRes.data);
         if (tRes.data) setThaans(tRes.data);
-        if (auditRes.data) setAuditRecords(auditRes.data);
         
         // Handle branches with fallback
         if (brRes.data) {
@@ -259,6 +256,30 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         else ageAnalysis.days90Plus += r.total;
     });
 
+    // Audit Records (Computed on client side to avoid view dependency issues)
+    const auditRecords = batches.map(b => {
+        const asset = assets.find(a => a.id === b.asset_id);
+        const loc = locations.find(l => l.id === b.current_location_id);
+        const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL && f.effective_to === null);
+        const loss = losses.find(l => l.batch_id === b.id);
+        const thaan = thaans.find(t => t.batch_id === b.id);
+        
+        const calcEndDate = loss ? new Date(loss.timestamp) : (thaan ? new Date(thaan.signed_at) : new Date());
+        const calcStartDate = new Date(b.transaction_date || b.created_at || '');
+        const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+        const zarLiability = daysAged * (fee?.amount_zar || 0) * b.quantity;
+        
+        return {
+            batch_id: b.id,
+            location_name: loc?.name || 'Unknown',
+            asset_name: asset?.name || 'Unknown',
+            supplier_id: asset?.supplier_id,
+            quantity: b.quantity,
+            days_aged: daysAged,
+            zar_liability: zarLiability
+        };
+    });
+
     // Branch Allocation
     const branchBreakdown: Record<string, number> = {};
     [...rentals, ...lossItems, ...penalties].forEach(item => {
@@ -271,7 +292,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     return { 
         rentals, losses: lossItems, penalties, offsets, 
         rentalSubtotal, lossSubtotal, penaltySubtotal, offsetSubtotal, 
-        grandTotal, branchBreakdown, ageAnalysis
+        grandTotal, branchBreakdown, ageAnalysis, auditRecords
     };
   }, [batches, fees, losses, claims, assets, locations, movements, thaans, selectedBranch, selectedSupplier, startDate, endDate]);
 
@@ -597,24 +618,24 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
               </h3>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Real-time batch aging and ZAR liability tracking</p>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-[10px] font-black text-slate-600 uppercase">
-              <Activity size={14} /> {auditRecords.length} Active Batches
-            </div>
+          <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-[10px] font-black text-slate-600 uppercase">
+            <Activity size={14} /> {reportData.auditRecords.length} Active Batches
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-900 text-white">
-                  <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest">Batch ID</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Location</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Asset</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center">Qty</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center">Days Aged</th>
-                  <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-right">ZAR Liability</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {auditRecords.filter(r => selectedSupplier === 'all' || r.supplier_id === selectedSupplier).map((record, idx) => (
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-900 text-white">
+                <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest">Batch ID</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Location</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Asset</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center">Qty</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center">Days Aged</th>
+                <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-right">ZAR Liability</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {reportData.auditRecords.filter(r => selectedSupplier === 'all' || r.supplier_id === selectedSupplier).map((record, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-8 py-5">
                       <span className="font-black text-slate-900 text-sm">#{record.batch_id}</span>
@@ -641,7 +662,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                     </td>
                   </tr>
                 ))}
-                {auditRecords.length === 0 && (
+              {reportData.auditRecords.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-10 py-24 text-center">
                       <div className="flex flex-col items-center gap-4">
