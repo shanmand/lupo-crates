@@ -81,30 +81,86 @@ const TripAuditTrail: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Fetch branches for dropdown
-      const { data: branchData } = await supabase.from('branches').select('*').order('name');
-      if (branchData) setBranches(branchData);
+      // Fetch all necessary data in parallel
+      const [
+        branchData,
+        movementsRes,
+        locationsRes,
+        partiesRes,
+        driversRes,
+        trucksRes,
+        shiftsRes
+      ] = await Promise.all([
+        supabase.from('branches').select('id, name').order('name'),
+        supabase.from('batch_movements').select('id, batch_id, from_location_id, to_location_id, truck_id, driver_id, quantity, condition, notes, transaction_date, timestamp')
+          .gte('transaction_date', filters.startDate)
+          .lte('transaction_date', filters.endDate),
+        supabase.from('locations').select('id, name'),
+        supabase.from('business_parties').select('id, name'),
+        supabase.from('drivers').select('id, full_name'),
+        supabase.from('trucks').select('id, plate_number, branch_id'),
+        supabase.from('driver_shifts').select('id, driver_id, truck_id, start_time, end_time, manual_end_time, notes')
+          .gte('start_time', new Date(new Date(filters.startDate).getTime() - 86400000).toISOString())
+          .order('start_time', { ascending: false })
+      ]);
 
-      let query = supabase
-        .from('vw_trip_audit_trail')
-        .select('*')
-        .gte('transaction_date', filters.startDate)
-        .lte('transaction_date', filters.endDate);
+      if (branchData.data) setBranches(branchData.data);
 
-      if (filters.driverName) {
-        query = query.ilike('driver_name', `%${filters.driverName}%`);
-      }
-      if (filters.truckPlate) {
-        query = query.ilike('truck_plate', `%${filters.truckPlate}%`);
-      }
-      if (filters.branchId && filters.branchId !== 'Consolidated') {
-        query = query.eq('branch_id', filters.branchId);
-      }
+      if (movementsRes.error) throw movementsRes.error;
+      
+      const allSources = [
+        ...(locationsRes.data || []),
+        ...(partiesRes.data || [])
+      ];
 
-      const { data, error } = await query.order('transaction_date', { ascending: false });
+      let filteredMovements = movementsRes.data || [];
 
-      if (error) throw error;
-      setRecords(data || []);
+      // Apply client-side filters
+      const auditRecords: TripAuditRecord[] = filteredMovements.map(bm => {
+        const truck = trucksRes.data?.find(t => t.id === bm.truck_id);
+        const driver = driversRes.data?.find(d => d.id === bm.driver_id);
+        const fromLoc = allSources.find(s => s.id === bm.from_location_id);
+        const toLoc = allSources.find(s => s.id === bm.to_location_id);
+        
+        // Find the most recent shift for this driver and truck that started before the movement
+        const shift = shiftsRes.data?.find(s => 
+          s.driver_id === bm.driver_id && 
+          s.truck_id === bm.truck_id && 
+          new Date(s.start_time) <= new Date(bm.timestamp)
+        );
+
+        return {
+          movement_id: bm.id,
+          movement_time: bm.timestamp,
+          transaction_date: bm.transaction_date,
+          batch_id: bm.batch_id,
+          quantity: bm.quantity,
+          condition: bm.condition,
+          route_instructions: bm.notes, // Using notes as route_instructions if not present
+          from_location: fromLoc?.name || bm.from_location_id || 'Unknown',
+          to_location: toLoc?.name || bm.to_location_id || 'Unknown',
+          driver_name: driver?.full_name || 'Unknown',
+          driver_id: bm.driver_id,
+          truck_plate: truck?.plate_number || 'Unknown',
+          truck_id: bm.truck_id,
+          branch_id: truck?.branch_id || 'Unknown',
+          shift_id: shift?.id || '',
+          shift_start: shift?.start_time || '',
+          shift_end: shift?.end_time || '',
+          manual_end_time: shift?.manual_end_time || '',
+          shift_notes: shift?.notes || ''
+        };
+      });
+
+      // Apply remaining filters
+      const finalRecords = auditRecords.filter(r => {
+        const driverMatch = !filters.driverName || r.driver_name.toLowerCase().includes(filters.driverName.toLowerCase());
+        const truckMatch = !filters.truckPlate || r.truck_plate.toLowerCase().includes(filters.truckPlate.toLowerCase());
+        const branchMatch = !filters.branchId || filters.branchId === 'Consolidated' || r.branch_id === filters.branchId;
+        return driverMatch && truckMatch && branchMatch;
+      });
+
+      setRecords(finalRecords);
     } catch (err) {
       console.error("Error fetching trip audit trail:", err);
     } finally {
