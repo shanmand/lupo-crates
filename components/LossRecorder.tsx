@@ -33,15 +33,37 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     }
     setIsLoading(true);
     try {
-      const [lossRes, batchRes, sourceRes] = await Promise.all([
-        supabase.from('vw_loss_report').select('*').order('timestamp', { ascending: false }),
+      const [lossRes, batchRes, sourceRes, assetsRes] = await Promise.all([
+        supabase.from('asset_losses').select('*').order('timestamp', { ascending: false }),
         supabase.from('batches').select('*, asset:asset_master(name)').eq('status', 'Success').gt('quantity', 0),
-        supabase.from('vw_all_sources').select('*')
+        supabase.from('vw_all_sources').select('*'),
+        supabase.from('asset_master').select('id, name')
       ]);
 
-      if (lossRes.data) setLosses(lossRes.data);
       if (batchRes.data) setBatches(batchRes.data);
       if (sourceRes.data) setSources(sourceRes.data);
+      
+      if (lossRes.data && batchRes.data && sourceRes.data && assetsRes.data) {
+        const losses = lossRes.data;
+        const batches = batchRes.data;
+        const locations = sourceRes.data;
+        const assets = assetsRes.data;
+
+        // Join data (replicating vw_loss_report)
+        const joinedLosses = losses.map(al => {
+          const batch = batches.find(b => b.id === al.batch_id);
+          const asset = assets.find(a => a.id === batch?.asset_id);
+          const location = locations.find(l => l.id === al.location_id);
+
+          return {
+            ...al,
+            asset_name: asset?.name || 'Unknown Asset',
+            location_name: location?.name || 'Unknown Location'
+          };
+        });
+
+        setLosses(joinedLosses);
+      }
     } catch (error) {
       console.error('Error fetching loss data:', error);
     } finally {

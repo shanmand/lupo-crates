@@ -35,13 +35,41 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
     }
     setIsLoading(true);
     try {
-      const [typesRes, regRes] = await Promise.all([
+      const [typesRes, batchesRes, locationsRes] = await Promise.all([
         supabase.from('asset_master').select('*').order('name'),
-        supabase.from('vw_asset_registry').select('*').order('created_at', { ascending: false })
+        supabase.from('batches').select('*'),
+        supabase.from('vw_all_sources').select('*')
       ]);
 
       if (typesRes.data) setAssetTypes(typesRes.data);
-      if (regRes.data) setRegistry(regRes.data);
+      
+      if (batchesRes.data && locationsRes.data && typesRes.data) {
+        const batches = batchesRes.data;
+        const locations = locationsRes.data;
+        const assetMaster = typesRes.data;
+
+        // Join data (replicating vw_asset_registry)
+        const joinedRegistry = batches.map(b => {
+          const asset = assetMaster.find(a => a.id === b.asset_id);
+          const location = locations.find(l => l.id === b.current_location_id);
+
+          return {
+            batch_id: b.id,
+            asset_id: b.asset_id,
+            asset_name: asset?.name || 'Unknown Asset',
+            asset_type: asset?.type,
+            ownership_type: asset?.ownership_type,
+            quantity: b.quantity,
+            current_location_id: b.current_location_id,
+            location_name: location?.name || 'Unknown Location',
+            status: b.status,
+            transaction_date: b.transaction_date,
+            created_at: b.created_at
+          };
+        });
+
+        setRegistry(joinedRegistry);
+      }
     } catch (error) {
       console.error('Error fetching asset data:', error);
     } finally {

@@ -31,13 +31,35 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser }) => {
     }
     setIsLoading(true);
     try {
-      const [sourceRes, histRes] = await Promise.all([
+      const [sourceRes, takesRes, itemsRes] = await Promise.all([
         supabase.from('vw_all_sources').select('*'),
-        supabase.from('vw_stock_take_history').select('*').order('take_date', { ascending: false })
+        supabase.from('stock_takes').select('*').order('take_date', { ascending: false }),
+        supabase.from('stock_take_items').select('*')
       ]);
 
       if (sourceRes.data) setSources(sourceRes.data);
-      if (histRes.data) setHistory(histRes.data);
+      
+      if (takesRes.data && itemsRes.data && sourceRes.data) {
+        const takes = takesRes.data;
+        const items = itemsRes.data;
+        const locations = sourceRes.data;
+
+        // Aggregate data (replicating vw_stock_take_history)
+        const aggregatedHistory = takes.map(st => {
+          const location = locations.find(l => l.id === st.location_id);
+          const takeItems = items.filter(i => i.stock_take_id === st.id);
+          const totalVariance = takeItems.reduce((sum, i) => sum + Math.abs(i.variance || 0), 0);
+
+          return {
+            ...st,
+            location_name: location?.name || 'Unknown Location',
+            item_count: takeItems.length,
+            total_variance: totalVariance
+          };
+        });
+
+        setHistory(aggregatedHistory);
+      }
     } catch (error) {
       console.error('Error fetching stock take data:', error);
     } finally {

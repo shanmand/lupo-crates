@@ -17,13 +17,32 @@ const InventoryMap: React.FC = () => {
       }
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('vw_inventory_map_data')
-          .select('*')
-          .order('total_assets', { ascending: false });
+        // Fetch batches and locations to aggregate client-side
+        const [batchesRes, locationsRes] = await Promise.all([
+          supabase.from('batches').select('asset_id, current_location_id, quantity'),
+          supabase.from('vw_all_sources').select('*')
+        ]);
 
-        if (error) throw error;
-        setLocations(data || []);
+        if (batchesRes.error) throw batchesRes.error;
+        if (locationsRes.error) throw locationsRes.error;
+
+        const batches = batchesRes.data || [];
+        const allLocations = locationsRes.data || [];
+
+        // Aggregate data by location (replicating vw_inventory_map_data)
+        const aggregatedData = allLocations.map(loc => {
+          const locationBatches = batches.filter(b => b.current_location_id === loc.id);
+          const totalAssets = locationBatches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+          const assetTypes = new Set(locationBatches.map(b => b.asset_id)).size;
+
+          return {
+            ...loc,
+            total_assets: totalAssets,
+            asset_types: assetTypes
+          };
+        }).filter(loc => loc.total_assets > 0);
+
+        setLocations(aggregatedData);
       } catch (err) {
         console.error("Inventory Map Fetch Error:", err);
       } finally {
