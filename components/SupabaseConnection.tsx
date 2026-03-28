@@ -80,7 +80,6 @@ const SupabaseConnection: React.FC = () => {
         { name: 'locations', type: 'table' },
         { name: 'batches', type: 'table' },
         { name: 'vw_global_inventory_tracker', type: 'view' },
-        { name: 'vw_batch_forensics', type: 'view' },
         { name: 'vw_all_sources', type: 'view' },
         { name: 'vw_all_origins', type: 'view' },
         { name: 'vw_movement_destinations', type: 'view' },

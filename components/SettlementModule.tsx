@@ -58,29 +58,60 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
         setBatches([]);
         return;
       }
-      // Fetch batches from the master view for this supplier
-      const { data } = await supabase
-        .from('vw_global_inventory_tracker')
-        .select('*')
-        .eq('supplier_id', selectedSupplier)
-        .eq('is_settled', false);
       
-      if (data) {
-        // Map view columns to Batch type
-        const mapped = data.map((item: any) => ({
-          id: item.batch_id,
-          asset_id: item.asset_id,
-          quantity: item.quantity,
-          transaction_date: item.transaction_date,
-          daily_rental_fee: item.daily_rental_fee,
-          daily_accrued_liability: item.daily_accrued_liability,
-          created_at: item.transaction_date
-        }));
-        setBatches(mapped as any);
-      }
+      // Fetch data needed for calculation
+      const [batchesRes, sourcesRes, feesRes] = await Promise.all([
+        supabase.from('batches').select('*').eq('is_settled', false),
+        supabase.from('vw_all_sources').select('*'),
+        supabase.from('fee_schedule').select('*').eq('is_active', true)
+      ]);
+
+      if (batchesRes.error) throw batchesRes.error;
+      
+      const batchesData = batchesRes.data || [];
+      const sourcesData = sourcesRes.data || [];
+      const feesData = feesRes.data || [];
+
+      // Filter and map batches client-side
+      const filtered = batchesData
+        .filter(b => {
+          // Find asset to check supplier
+          const asset = assets.find(a => a.id === b.asset_id);
+          if (asset?.supplier_id !== selectedSupplier) return false;
+
+          // Date filtering
+          const transDate = b.transaction_date || b.created_at.split('T')[0];
+          if (startDate && transDate < startDate) return false;
+          if (endDate && transDate > endDate) return false;
+
+          return true;
+        })
+        .map(b => {
+          // Calculate liability
+          const assetFee = feesData.find(f => f.asset_id === b.asset_id && f.fee_type.startsWith('Daily Rental'));
+          const dailyRentalFee = assetFee?.amount_zar || 0;
+          
+          const start = new Date(b.transaction_date || b.created_at);
+          const end = new Date(endDate); // Calculate up to the selected end date
+          const diffTime = Math.max(0, end.getTime() - start.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const accruedLiability = diffDays * dailyRentalFee * b.quantity;
+
+          return {
+            id: b.id,
+            asset_id: b.asset_id,
+            quantity: b.quantity,
+            transaction_date: b.transaction_date || b.created_at.split('T')[0],
+            daily_rental_fee: dailyRentalFee,
+            daily_accrued_liability: accruedLiability,
+            created_at: b.created_at
+          };
+        });
+
+      setBatches(filtered as any);
     };
     fetchBatches();
-  }, [selectedSupplier]);
+  }, [selectedSupplier, startDate, endDate, assets]);
 
   const calculateLiability = (batch: any) => {
     // Use the accrued liability from the view

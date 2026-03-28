@@ -22,40 +22,78 @@ const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: 
     setIsLoading(true);
     try {
       console.log('Fetching Forensic Data with filters:', { selectedBranchId, startDate, endDate, page, searchQuery });
-      let query = supabase
-        .from('vw_master_logistics_trace')
-        .select('*', { count: 'exact' });
+      
+      // Fetch base data
+      const [movementsRes, sourcesRes] = await Promise.all([
+        supabase.from('batch_movements').select('*'),
+        supabase.from('vw_all_sources').select('*')
+      ]);
 
+      if (movementsRes.error) throw movementsRes.error;
+      if (sourcesRes.error) throw sourcesRes.error;
+
+      const movements = movementsRes.data || [];
+      const sources = sourcesRes.data || [];
+
+      // Join and filter client-side
+      let joinedData = movements.map(m => {
+        const fromLoc = sources.find(s => s.id === m.from_location_id);
+        const toLoc = sources.find(s => s.id === m.to_location_id);
+        
+        return {
+          movement_id: m.id,
+          batch_id: m.batch_id,
+          transaction_date: m.transaction_date,
+          timestamp: m.timestamp,
+          from_location_id: m.from_location_id,
+          from_location_name: fromLoc?.name || 'Unknown',
+          to_location_id: m.to_location_id,
+          to_location_name: toLoc?.name || 'Unknown',
+          quantity: m.quantity,
+          condition: m.condition,
+          driver_name: m.driver_name,
+          truck_plate: m.truck_plate,
+          custodian_branch_id: toLoc?.branch_id
+        };
+      });
+
+      // Apply Filters
       if (searchQuery) {
-        query = query.or(`batch_id.ilike.%${searchQuery}%,truck_plate.ilike.%${searchQuery}%,driver_name.ilike.%${searchQuery}%`);
+        const q = searchQuery.toLowerCase();
+        joinedData = joinedData.filter(item => 
+          item.batch_id.toLowerCase().includes(q) ||
+          (item.truck_plate || '').toLowerCase().includes(q) ||
+          (item.driver_name || '').toLowerCase().includes(q)
+        );
       }
 
       if (selectedBranchId && selectedBranchId !== 'Consolidated') {
-        query = query.eq('custodian_branch_id', selectedBranchId);
+        joinedData = joinedData.filter(item => item.custodian_branch_id === selectedBranchId);
       }
 
       if (startDate) {
-        query = query.gte('transaction_date', startDate);
+        joinedData = joinedData.filter(item => item.transaction_date >= startDate);
       }
 
       if (endDate) {
-        query = query.lte('transaction_date', endDate);
+        joinedData = joinedData.filter(item => item.transaction_date <= endDate);
       }
 
-      const { data: results, count, error } = await query
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-        .order('transaction_date', { ascending: false })
-        .order('movement_id', { ascending: false });
+      // Sort
+      joinedData.sort((a, b) => {
+        const dateA = new Date(a.transaction_date).getTime();
+        const dateB = new Date(b.transaction_date).getTime();
+        if (dateA !== dateB) return dateB - dateA;
+        return b.movement_id - a.movement_id;
+      });
 
-      if (error) {
-        console.error("Forensic Fetch Error:", error);
-        throw error;
-      }
+      setTotalCount(joinedData.length);
       
-      console.log('Forensic Data Received:', { count, dataLength: results?.length, firstTwo: results?.slice(0, 2) });
-      const uniqueData = Array.from(new Map((results || []).map(item => [item.movement_id, item])).values());
-      setData(uniqueData);
-      setTotalCount(count || 0);
+      // Paginate
+      const paginatedData = joinedData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+      setData(paginatedData);
+      
+      console.log('Forensic Data Processed:', { total: joinedData.length, pageLength: paginatedData.length });
     } catch (err) {
       console.error("Forensic Fetch Error:", err);
     } finally {

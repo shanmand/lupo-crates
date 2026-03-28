@@ -51,65 +51,104 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
       setIsLoading(true);
       setSchemaError(null);
       try {
-        let statsQuery = supabase.from('vw_dashboard_stats').select('*');
-        let activityQuery = supabase.from('vw_batch_forensics').select('*').limit(20);
-
-        if (branchContext && branchContext !== 'Consolidated') {
-          statsQuery = statsQuery.eq('branch_name', branchContext);
-          activityQuery = activityQuery.eq('branch_name', branchContext);
-        }
-
-        const [statsRes, activityRes] = await Promise.all([
-          branchContext === 'Consolidated' ? statsQuery : statsQuery.single(),
-          activityQuery.order('timestamp', { ascending: false })
+        // Fetch raw data for client-side aggregation
+        const [batchesRes, movementsRes, sourcesRes, branchesRes, feesRes] = await Promise.all([
+          supabase.from('batches').select('*'),
+          supabase.from('batch_movements').select('*').order('timestamp', { ascending: false }).limit(100),
+          supabase.from('vw_all_sources').select('*'),
+          supabase.from('branches').select('*'),
+          supabase.from('fee_schedule').select('*').eq('is_active', true)
         ]);
 
-        if (statsRes.error) console.log("Supabase Stats Error:", statsRes.error);
-        if (activityRes.error) {
-          console.log("Supabase Activity Error:", activityRes.error);
-          if (activityRes.error.code === '42703') {
-            setSchemaError("The database view 'vw_batch_forensics' is outdated. Please run the migrations in the Schema tab.");
-          }
-        }
+        if (batchesRes.error) throw batchesRes.error;
+        if (movementsRes.error) throw movementsRes.error;
+        if (sourcesRes.error) throw sourcesRes.error;
+        if (branchesRes.error) throw branchesRes.error;
 
-        if (branchContext === 'Consolidated' && Array.isArray(statsRes.data)) {
-          const consolidated = statsRes.data.reduce((acc, curr) => ({
-            total_units: (acc.total_units || 0) + (curr.total_units || 0),
-            pending_units: (acc.pending_units || 0) + (curr.pending_units || 0),
-            success_units: (acc.success_units || 0) + (curr.success_units || 0),
-            stagnant_units: (acc.stagnant_units || 0) + (curr.stagnant_units || 0),
-            pending_charges: (acc.pending_charges || 0) + (curr.pending_charges || 0),
-            accrued_rental: (acc.accrued_rental || 0) + (curr.accrued_rental || 0),
-            branch_name: 'Consolidated'
-          }), {} as DashboardStats);
-          setStats(consolidated);
-        } else {
-          setStats(statsRes.data || {
-            total_units: 0,
-            pending_units: 0,
-            success_units: 0,
-            stagnant_units: 0,
-            pending_charges: 0,
-            accrued_rental: 0,
-            branch_name: branchContext || 'N/A'
-          });
-        }
+        const batches = batchesRes.data || [];
+        const movements = movementsRes.data || [];
+        const sources = sourcesRes.data || [];
+        const branches = branchesRes.data || [];
+        const fees = feesRes.data || [];
 
-        if (activityRes.data) {
-          const mappedActivity = activityRes.data.map((item: any) => ({
-            date: item.date || item.transaction_date || item.timestamp,
-            type: item.type || item.condition || 'unknown',
-            batch_id: item.batch_id || item.batchId || 'N/A',
-            quantity: item.quantity,
-            from_location: item.from_location || 'N/A',
-            to_location: item.to_location || 'N/A',
-            branch_name: item.branch_name || 'N/A',
-            timestamp: item.timestamp || new Date().toISOString()
-          }));
-          setRecentActivity(mappedActivity);
-        } else {
-          setRecentActivity([]);
-        }
+        // Helper to calculate accrual (simplified version of the SQL function)
+        const calculateAccrual = (batch: any) => {
+          const assetFee = fees.find(f => f.asset_id === batch.asset_id && f.fee_type.startsWith('Daily Rental'));
+          if (!assetFee) return 0;
+          
+          const startDate = new Date(batch.transaction_date || batch.created_at);
+          const endDate = new Date();
+          const diffTime = Math.max(0, endDate.getTime() - startDate.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          return diffDays * assetFee.amount_zar * batch.quantity;
+        };
+
+        // Aggregate Stats
+        const filteredBatches = branchContext === 'Consolidated' 
+          ? batches 
+          : batches.filter(b => {
+              const loc = sources.find(s => s.id === b.current_location_id);
+              const branch = branches.find(br => br.id === loc?.branch_id);
+              return branch?.name === branchContext;
+            });
+
+        const now = new Date();
+        const statsData: DashboardStats = filteredBatches.reduce((acc, b) => {
+          const loc = sources.find(s => s.id === b.current_location_id);
+          const isPending = loc?.type === 'In Transit';
+          const isSuccess = b.status === 'Success';
+          
+          const transDate = new Date(b.transaction_date || b.created_at);
+          const diffDays = (now.getTime() - transDate.getTime()) / (1000 * 60 * 60 * 24);
+          const isStagnant = diffDays > 14 && !b.transfer_confirmed_by_customer;
+          
+          const accrual = calculateAccrual(b);
+
+          return {
+            total_units: acc.total_units + (b.quantity || 0),
+            pending_units: acc.pending_units + (isPending ? (b.quantity || 0) : 0),
+            success_units: acc.success_units + (isSuccess ? (b.quantity || 0) : 0),
+            stagnant_units: acc.stagnant_units + (isStagnant ? (b.quantity || 0) : 0),
+            pending_charges: acc.pending_charges + accrual,
+            accrued_rental: acc.accrued_rental + accrual,
+            branch_name: branchContext
+          };
+        }, {
+          total_units: 0,
+          pending_units: 0,
+          success_units: 0,
+          stagnant_units: 0,
+          pending_charges: 0,
+          accrued_rental: 0,
+          branch_name: branchContext
+        });
+
+        setStats(statsData);
+
+        // Map Recent Activity (Forensics)
+        const activityData = movements
+          .map(m => {
+            const batch = batches.find(b => b.id === m.batch_id);
+            const fromLoc = sources.find(s => s.id === m.from_location_id);
+            const toLoc = sources.find(s => s.id === m.to_location_id);
+            const branch = branches.find(br => br.id === toLoc?.branch_id);
+
+            return {
+              date: m.timestamp || m.transaction_date,
+              type: m.condition || 'Transfer',
+              batch_id: m.batch_id,
+              quantity: m.quantity || batch?.quantity || 0,
+              from_location: fromLoc?.name || 'Unknown',
+              to_location: toLoc?.name || 'Unknown',
+              branch_name: branch?.name || 'Global',
+              timestamp: m.timestamp || new Date().toISOString()
+            };
+          })
+          .filter(a => branchContext === 'Consolidated' || a.branch_name === branchContext)
+          .slice(0, 20);
+
+        setRecentActivity(activityData);
       } catch (err) {
         console.error("Dashboard Fetch Error:", err);
       } finally {

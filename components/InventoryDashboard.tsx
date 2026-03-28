@@ -37,17 +37,77 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
     }
     setIsLoading(true);
     try {
-      const [invRes, assetRes, sourceRes, recentRes] = await Promise.all([
-        supabase.from('vw_inventory_summary').select('*'),
+      const [batchesRes, assetRes, sourceRes] = await Promise.all([
+        supabase.from('batches').select('*'),
         supabase.from('asset_master').select('*'),
-        supabase.from('vw_all_sources').select('*'),
-        supabase.from('vw_recent_intakes').select('*').limit(10)
+        supabase.from('vw_all_sources').select('*')
       ]);
 
-      if (invRes.data) setInventory(invRes.data);
-      if (assetRes.data) setAssets(assetRes.data);
-      if (sourceRes.data) setSources(sourceRes.data);
-      if (recentRes.data) setRecentIntakes(recentRes.data);
+      if (batchesRes.error) throw batchesRes.error;
+      if (assetRes.error) throw assetRes.error;
+      if (sourceRes.error) throw sourceRes.error;
+
+      const batches = batchesRes.data || [];
+      const assetsData = assetRes.data || [];
+      const sourcesData = sourceRes.data || [];
+
+      setAssets(assetsData);
+      setSources(sourcesData);
+
+      // Aggregate Inventory Summary
+      const summaryMap = new Map();
+      batches
+        .filter(b => b.status === 'Success' && b.quantity > 0)
+        .forEach(b => {
+          const key = `${b.current_location_id}-${b.asset_id}`;
+          const loc = sourcesData.find(s => s.id === b.current_location_id);
+          const asset = assetsData.find(a => a.id === b.asset_id);
+          
+          if (!summaryMap.has(key)) {
+            summaryMap.set(key, {
+              location_id: b.current_location_id,
+              location_name: loc?.name || 'Unknown Location',
+              location_type: loc?.type || 'Unknown',
+              branch_id: loc?.branch_id,
+              asset_id: b.asset_id,
+              asset_name: asset?.name || 'Unknown Asset',
+              asset_type: asset?.type,
+              total_quantity: 0,
+              batch_count: 0
+            });
+          }
+          
+          const entry = summaryMap.get(key);
+          entry.total_quantity += (b.quantity || 0);
+          entry.batch_count += 1;
+        });
+      
+      setInventory(Array.from(summaryMap.values()));
+
+      // Map Recent Intakes
+      const recent = batches
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 10)
+        .map(b => {
+          const asset = assetsData.find(a => a.id === b.asset_id);
+          const toLoc = sourcesData.find(s => s.id === b.current_location_id);
+          const fromLoc = sourcesData.find(s => s.id === b.origin_location_id);
+          
+          return {
+            batch_id: b.id,
+            asset_id: b.asset_id,
+            asset_name: asset?.name || 'Unknown Asset',
+            quantity: b.quantity,
+            to_location_id: b.current_location_id,
+            to_location_name: toLoc?.name || 'Unknown',
+            from_location_id: b.origin_location_id,
+            from_location_name: fromLoc?.name || 'Direct Intake',
+            created_at: b.created_at,
+            notes: b.notes
+          };
+        });
+      
+      setRecentIntakes(recent);
     } catch (error) {
       console.error('Error fetching inventory data:', error);
     } finally {
