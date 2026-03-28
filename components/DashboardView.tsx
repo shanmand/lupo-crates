@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Truck, Package, AlertTriangle, TrendingUp, ShieldAlert, User as UserIcon, UserCheck, Loader2, Zap, Activity, CheckCircle, Clock, DollarSign } from 'lucide-react';
-import { User as UserType, DashboardStats, BatchForensics } from '../types';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { User as UserType, DashboardStats, BatchForensics, AllSource } from '../types';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { MOCK_BATCHES, MOCK_LOCATIONS } from '../constants';
 
 interface DashboardViewProps {
@@ -52,22 +52,20 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
       setSchemaError(null);
       try {
         // Fetch raw data for client-side aggregation
-        const [batchesRes, movementsRes, sourcesRes, branchesRes, feesRes] = await Promise.all([
+        const [batchesRes, movementsRes, sources, branchesRes, feesRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('batch_movements').select('*').order('timestamp', { ascending: false }).limit(100),
-          supabase.from('vw_all_sources').select('*'),
+          fetchAllSources(),
           supabase.from('branches').select('*'),
           supabase.from('fee_schedule').select('*').eq('is_active', true)
         ]);
 
         if (batchesRes.error) throw batchesRes.error;
         if (movementsRes.error) throw movementsRes.error;
-        if (sourcesRes.error) throw sourcesRes.error;
         if (branchesRes.error) throw branchesRes.error;
 
         const batches = batchesRes.data || [];
         const movements = movementsRes.data || [];
-        const sources = sourcesRes.data || [];
         const branches = branchesRes.data || [];
         const fees = feesRes.data || [];
 

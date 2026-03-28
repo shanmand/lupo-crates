@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Package, Plus, Search, Filter, Loader2, CheckCircle2, AlertCircle, Trash2, Edit2, Database, Shield, CreditCard, History } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { AssetMaster, User } from '../types';
 
 interface AssetListProps {
@@ -35,17 +35,17 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
     }
     setIsLoading(true);
     try {
-      const [typesRes, batchesRes, locationsRes] = await Promise.all([
+      const [typesRes, batchesRes, sources] = await Promise.all([
         supabase.from('asset_master').select('*').order('name'),
         supabase.from('batches').select('*'),
-        supabase.from('vw_all_sources').select('*')
+        fetchAllSources()
       ]);
 
       if (typesRes.data) setAssetTypes(typesRes.data);
       
-      if (batchesRes.data && locationsRes.data && typesRes.data) {
+      if (batchesRes.data && sources && typesRes.data) {
         const batches = batchesRes.data;
-        const locations = locationsRes.data;
+        const locations = sources;
         const assetMaster = typesRes.data;
 
         // Join data (replicating vw_asset_registry)

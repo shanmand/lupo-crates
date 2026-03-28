@@ -13,7 +13,7 @@ import {
   Clock,
   Flame
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Branch } from '../types';
 
 interface DailyBurnRecord {
@@ -40,22 +40,60 @@ const LiabilityHeatmap: React.FC = () => {
       }
       setIsLoading(true);
       try {
-        const [burnRes, branchesRes] = await Promise.all([
-          supabase
-            .from('vw_daily_burn_rate')
-            .select('*')
-            .order('daily_burn_rate', { ascending: false }),
-          supabase
-            .from('branches')
-            .select('*')
-            .order('name')
+        const [batchesRes, sources, branchesRes, feesRes] = await Promise.all([
+          supabase.from('batches').select('*').eq('transfer_confirmed_by_customer', false),
+          fetchAllSources(),
+          supabase.from('branches').select('*').order('name'),
+          supabase.from('fee_schedule').select('*').is('effective_to', null)
         ]);
 
-        if (burnRes.error) throw burnRes.error;
+        if (batchesRes.error) throw batchesRes.error;
         if (branchesRes.error) throw branchesRes.error;
 
-        setData(burnRes.data || []);
-        setBranches(branchesRes.data || []);
+        const batches = batchesRes.data || [];
+        const fees = feesRes.data || [];
+        const branchesData = branchesRes.data || [];
+
+        // Reconstruct burn rate data client-side
+        const burnMap = new Map();
+        
+        batches.forEach(bt => {
+          const source = sources.find(s => s.id === bt.current_location_id);
+          if (!source) return;
+
+          const branch = branchesData.find(br => br.id === source.branch_id);
+          const fee = fees.find(fs => fs.asset_id === bt.asset_id);
+          if (!fee) return;
+
+          const key = source.id;
+          const burnAmount = bt.quantity * fee.amount_zar;
+          const durationDays = (new Date().getTime() - new Date(bt.transaction_date || bt.created_at).getTime()) / 86400000;
+
+          if (!burnMap.has(key)) {
+            burnMap.set(key, {
+              branch_name: branch?.name || 'Global/Unassigned',
+              location_name: source.name,
+              location_id: source.id,
+              branch_id: branch?.id || '',
+              daily_burn_rate: 0,
+              batch_count: 0,
+              total_duration: 0
+            });
+          }
+
+          const entry = burnMap.get(key);
+          entry.daily_burn_rate += burnAmount;
+          entry.batch_count += 1;
+          entry.total_duration += durationDays;
+        });
+
+        const burnRecords = Array.from(burnMap.values()).map(entry => ({
+          ...entry,
+          avg_duration_days: entry.total_duration / entry.batch_count
+        })).sort((a, b) => b.daily_burn_rate - a.daily_burn_rate);
+
+        setData(burnRecords as any);
+        setBranches(branchesData);
       } catch (err) {
         console.error("Heatmap Fetch Error:", err);
       } finally {

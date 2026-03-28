@@ -35,21 +35,51 @@ const CollectionRequests: React.FC<CollectionRequestsProps> = ({ currentUser, on
 
     setIsLoading(true);
     try {
-      const [assetsRes, originsRes, pendingRes] = await Promise.all([
+      const [assetsRes, locationsRes, partiesRes, pendingRes] = await Promise.all([
         supabase.from('asset_master').select('*'),
-        supabase.from('vw_all_origins').select('*'),
-        supabase.from('vw_pending_collections').select('*')
+        supabase.from('locations').select('*'),
+        supabase.from('business_parties').select('*'),
+        supabase.from('collection_requests').select('*').eq('status', 'Pending')
       ]);
 
       if (assetsRes.data) {
         setAssetsMaster(assetsRes.data);
-        if (assetsRes.data.length > 0) setAssetId(assetsRes.data[0].id);
+        if (assetsRes.data.length > 0 && !assetId) setAssetId(assetsRes.data[0].id);
       }
-      if (originsRes.data) {
-        setOrigins(originsRes.data);
-        if (originsRes.data.length > 0) setCustomerId(originsRes.data[0].id);
+
+      const allSources = [
+        ...(locationsRes.data || []).map(l => ({
+          ...l,
+          display_name: `${l.name} (${l.partner_type})`,
+          sort_group: l.partner_type === 'Internal' && l.type !== 'In Transit' ? 1 : (l.type === 'In Transit' ? 3 : 2),
+          source_table: 'Location'
+        })),
+        ...(partiesRes.data || []).map(p => ({
+          ...p,
+          display_name: `${p.name} (${p.party_type})`,
+          sort_group: 2,
+          source_table: 'BusinessParty'
+        }))
+      ].sort((a, b) => {
+        if (a.sort_group !== b.sort_group) return a.sort_group - b.sort_group;
+        return a.name.localeCompare(b.name);
+      });
+
+      setOrigins(allSources);
+      if (allSources.length > 0 && !customerId) setCustomerId(allSources[0].id);
+
+      if (pendingRes.data) {
+        const enrichedPending = pendingRes.data.map(req => {
+          const customer = allSources.find(s => s.id === req.customer_id);
+          const asset = (assetsRes.data || []).find(a => a.id === req.asset_id);
+          return {
+            ...req,
+            customer_name: customer ? customer.name : 'Unknown Customer',
+            asset_name: asset ? asset.name : 'Unknown Asset'
+          };
+        });
+        setPendingCollections(enrichedPending);
       }
-      if (pendingRes.data) setPendingCollections(pendingRes.data);
     } catch (err) {
       console.error("Error fetching collection data:", err);
     } finally {

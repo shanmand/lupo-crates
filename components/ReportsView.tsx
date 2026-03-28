@@ -18,7 +18,7 @@ import {
   ArrowRight,
   History as HistoryIcon
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_MOVEMENTS, MOCK_TRUCKS, MOCK_DRIVERS } from '../constants';
 import { Batch, Location, AssetMaster, Branch, PartnerType, LocationType, LogisticsTrace, Trip, TripStop, Driver, Truck as TruckType } from '../types';
 
@@ -80,9 +80,9 @@ const ReportsView: React.FC = () => {
       }
       setIsLoading(true);
       try {
-        const [bRes, lRes, aRes, brRes, mRes, tripsRes, stopsRes, driversRes, trucksRes, feesRes] = await Promise.all([
+        const [bRes, sources, aRes, brRes, mRes, tripsRes, stopsRes, driversRes, trucksRes, feesRes] = await Promise.all([
           supabase.from('batches').select('*'),
-          supabase.from('vw_all_sources').select('*'),
+          fetchAllSources(),
           supabase.from('asset_master').select('*'),
           supabase.from('branches').select('*'),
           supabase.from('batch_movements').select('*').order('timestamp', { ascending: false }).limit(1000),
@@ -96,7 +96,7 @@ const ReportsView: React.FC = () => {
         if (bRes.data) {
           const mapped = bRes.data.map((b: any) => {
             const asset = aRes.data?.find((a: any) => a.id === b.asset_id);
-            const loc = lRes.data?.find((l: any) => l.id === b.current_location_id);
+            const loc = sources.find((l: any) => l.id === b.current_location_id);
             const fee = feesRes.data?.find((f: any) => f.asset_id === b.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
             
             const calcEndDate = new Date();
@@ -123,8 +123,8 @@ const ReportsView: React.FC = () => {
 
         if (mRes.data) {
           const mapped = mRes.data.map((m: any) => {
-            const fromLoc = lRes.data?.find((l: any) => l.id === m.from_location_id);
-            const toLoc = lRes.data?.find((l: any) => l.id === m.to_location_id);
+            const fromLoc = sources.find((l: any) => l.id === m.from_location_id);
+            const toLoc = sources.find((l: any) => l.id === m.to_location_id);
             return {
               ...m,
               from_location_name: fromLoc?.name || 'Unknown',
@@ -133,6 +133,9 @@ const ReportsView: React.FC = () => {
             };
           });
           setTraces(mapped);
+        }
+        if (sources) {
+          setLocations(sources as any);
         }
         if (tripsRes.data) setTrips(tripsRes.data);
         if (stopsRes.data) setTripStops(stopsRes.data);

@@ -23,7 +23,7 @@ import {
   Loader2,
   FileText
 } from 'lucide-react';
-import { supabase } from '../supabase';
+import { supabase, fetchAllSources } from '../supabase';
 import { format, startOfWeek, subDays, isWithinInterval, parseISO } from 'date-fns';
 
 interface IntakeSummary {
@@ -45,17 +45,17 @@ const BatchSummaryReport: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [movementsRes, sourcesRes] = await Promise.all([
+      const [movementsRes, sources] = await Promise.all([
         supabase.from('batch_movements').select('*'),
-        supabase.from('vw_all_sources').select('*')
+        fetchAllSources()
       ]);
 
-      if (movementsRes.data && sourcesRes.data) {
+      if (movementsRes.data && sources) {
         // Aggregate movements by week, source type, and source name
         const summary: Record<string, IntakeSummary> = {};
         
         movementsRes.data.forEach((m: any) => {
-          const source = sourcesRes.data.find((s: any) => s.id === m.from_location_id);
+          const source = sources.find((s: any) => s.id === m.from_location_id);
           if (!source) return;
 
           const date = new Date(m.transaction_date);

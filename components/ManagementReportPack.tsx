@@ -35,7 +35,7 @@ import {
   Legend
 } from 'recharts';
 import { format, differenceInDays, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Truck as TruckType, Driver, Branch, Task, ManagementKPIs, LocationUnconfirmedValue, BatchAccrual, BranchFleetExpense } from '../types';
 
 const ManagementReportPack: React.FC = () => {
@@ -56,7 +56,7 @@ const ManagementReportPack: React.FC = () => {
     try {
       const [
         batchesRes,
-        locationsRes,
+        sources,
         assetsRes,
         branchesRes,
         movementsRes,
@@ -70,7 +70,7 @@ const ManagementReportPack: React.FC = () => {
         lossesRes
       ] = await Promise.all([
         supabase.from('batches').select('*'),
-        supabase.from('vw_all_sources').select('*'),
+        fetchAllSources(),
         supabase.from('asset_master').select('*'),
         supabase.from('branches').select('*'),
         supabase.from('batch_movements').select('*'),
@@ -87,7 +87,7 @@ const ManagementReportPack: React.FC = () => {
       if (batchesRes.data) {
         const mappedAccruals = batchesRes.data.map((b: any) => {
           const fee = feesRes.data?.find((f: any) => f.asset_id === b.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
-          const loc = locationsRes.data?.find((l: any) => l.id === b.current_location_id);
+          const loc = sources.find((l: any) => l.id === b.current_location_id);
           const calcEndDate = new Date();
           const calcStartDate = new Date(b.transaction_date || b.created_at || '');
           const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
@@ -105,7 +105,7 @@ const ManagementReportPack: React.FC = () => {
           .filter((b: any) => b.status === 'In Transit' || b.status === 'Pending')
           .map((b: any) => {
             const asset = assetsRes.data?.find((a: any) => a.id === b.asset_id);
-            const loc = locationsRes.data?.find((l: any) => l.id === b.current_location_id);
+            const loc = sources.find((l: any) => l.id === b.current_location_id);
             const fee = feesRes.data?.find((f: any) => f.asset_id === b.asset_id && f.fee_type.includes('Replacement') && f.effective_to === null);
             return {
               location_id: b.current_location_id,

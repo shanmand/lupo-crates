@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { User, UserRole } from './types';
+import { User, UserRole, AllSource } from './types';
 
 /**
  * DEPLOYMENT NOTE:
@@ -30,6 +30,51 @@ console.log('isSupabaseConfigured:', isSupabaseConfigured);
  * This singleton is used for all DB and Auth interactions.
  */
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/**
+ * Fetch all sources (locations + business_parties)
+ * Replicates vw_all_sources
+ */
+export const fetchAllSources = async (): Promise<AllSource[]> => {
+  const [locsRes, partiesRes] = await Promise.all([
+    supabase.from('locations').select('*'),
+    supabase.from('business_parties').select('*')
+  ]);
+
+  if (locsRes.error) throw locsRes.error;
+  if (partiesRes.error) throw partiesRes.error;
+
+  const locations: AllSource[] = (locsRes.data || []).map(l => ({
+    id: l.id,
+    name: l.name,
+    partner_type: l.partner_type,
+    branch_id: l.branch_id,
+    type: l.type,
+    category: l.category,
+    address: l.address,
+    display_name: `${l.name} (${l.partner_type})`,
+    sort_group: l.partner_type === 'Internal' && l.type !== 'In Transit' ? 1 : (l.type === 'In Transit' ? 3 : 2),
+    source_table: 'Location'
+  }));
+
+  const parties: AllSource[] = (partiesRes.data || []).map(p => ({
+    id: p.id,
+    name: p.name,
+    partner_type: p.party_type,
+    branch_id: null,
+    type: 'Business Party',
+    category: 'External',
+    address: p.address,
+    display_name: `${p.name} (${p.party_type})`,
+    sort_group: 2,
+    source_table: 'BusinessParty'
+  }));
+
+  return [...locations, ...parties].sort((a, b) => {
+    if (a.sort_group !== b.sort_group) return a.sort_group - b.sort_group;
+    return a.name.localeCompare(b.name);
+  });
+};
 
 /**
  * Storage Helpers

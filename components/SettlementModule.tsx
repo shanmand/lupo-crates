@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Location, Batch, AssetMaster, FeeSchedule, User, UserRole, Settlement } from '../types';
 import { Receipt, DollarSign, Calendar, MapPin, Calculator, Loader2, CheckCircle2, AlertTriangle, TrendingUp, Info, Download, Trash2, History as HistoryIcon } from 'lucide-react';
 
@@ -60,16 +60,15 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
       }
       
       // Fetch data needed for calculation
-      const [batchesRes, sourcesRes, feesRes] = await Promise.all([
+      const [batchesRes, sourcesData, feesRes] = await Promise.all([
         supabase.from('batches').select('*').eq('is_settled', false),
-        supabase.from('vw_all_sources').select('*'),
+        fetchAllSources(),
         supabase.from('fee_schedule').select('*').eq('is_active', true)
       ]);
 
       if (batchesRes.error) throw batchesRes.error;
       
       const batchesData = batchesRes.data || [];
-      const sourcesData = sourcesRes.data || [];
       const feesData = feesRes.data || [];
 
       // Filter and map batches client-side

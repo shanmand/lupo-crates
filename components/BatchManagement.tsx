@@ -1,15 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { Package, Plus, RefreshCw, CheckCircle2, AlertTriangle, Search, Filter, Database, ArrowDownToLine, Edit2, Trash2, X } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import BranchSelector from './BranchSelector';
-import { Batch, AssetMaster, Source } from '../types';
+import { Batch, AssetMaster, AllSource } from '../types';
 import { castId, normalizePayload } from '../supabaseUtils';
 
 const BatchManagement: React.FC = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
+  const [sources, setSources] = useState<AllSource[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
@@ -31,10 +31,10 @@ const BatchManagement: React.FC = () => {
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
-      const [batchesRes, assetsRes, sourcesRes] = await Promise.all([
+      const [batchesRes, assetsRes, sourcesData] = await Promise.all([
         supabase.from('batches').select('*').order('created_at', { ascending: false }),
         supabase.from('asset_master').select('*').order('name'),
-        supabase.from('vw_all_sources').select('*').order('sort_group', { ascending: true }).order('name', { ascending: true })
+        fetchAllSources()
       ]);
 
       if (batchesRes.data) setBatches(batchesRes.data);
@@ -44,11 +44,10 @@ const BatchManagement: React.FC = () => {
           setNewBatch(prev => ({ ...prev, asset_id: assetsRes.data[0].id }));
         }
       }
-      if (sourcesRes.data) {
-        setSources(sourcesRes.data);
-        if (sourcesRes.data.length > 0 && !newBatch.current_location_id) {
-          setNewBatch(prev => ({ ...prev, current_location_id: sourcesRes.data[0].id }));
-        }
+      
+      setSources(sourcesData);
+      if (sourcesData.length > 0 && !newBatch.current_location_id) {
+        setNewBatch(prev => ({ ...prev, current_location_id: sourcesData[0].id }));
       }
     } catch (err: any) {
       console.error("Fetch error:", err);

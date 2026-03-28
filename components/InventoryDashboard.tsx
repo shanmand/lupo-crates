@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Package, MapPin, TrendingUp, AlertCircle, Plus, Search, Loader2, CheckCircle2, ArrowRight, History, Download } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { User, AssetMaster, Location } from '../types';
 
 interface InventoryDashboardProps {
@@ -37,19 +37,17 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
     }
     setIsLoading(true);
     try {
-      const [batchesRes, assetRes, sourceRes] = await Promise.all([
+      const [batchesRes, assetRes, sourcesData] = await Promise.all([
         supabase.from('batches').select('*'),
         supabase.from('asset_master').select('*'),
-        supabase.from('vw_all_sources').select('*')
+        fetchAllSources()
       ]);
 
       if (batchesRes.error) throw batchesRes.error;
       if (assetRes.error) throw assetRes.error;
-      if (sourceRes.error) throw sourceRes.error;
 
       const batches = batchesRes.data || [];
       const assetsData = assetRes.data || [];
-      const sourcesData = sourceRes.data || [];
 
       setAssets(assetsData);
       setSources(sourcesData);

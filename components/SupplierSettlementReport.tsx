@@ -34,7 +34,7 @@ import {
   Map,
   CheckCircle2
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 
 interface SupplierSettlementReportProps {
   isAdmin: boolean;
@@ -92,13 +92,13 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
 
       setIsLoading(true);
       try {
-        const [bRes, fRes, lRes, cRes, aRes, locRes, mRes, tRes, brRes] = await Promise.all([
+        const [bRes, fRes, lRes, cRes, aRes, sources, mRes, tRes, brRes] = await Promise.all([
           supabase.from('batches').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('asset_losses').select('*'),
           supabase.from('claims').select('*'),
           supabase.from('asset_master').select('*'),
-          supabase.from('vw_all_sources').select('*'),
+          fetchAllSources(),
           supabase.from('batch_movements').select('*'),
           supabase.from('thaan_slips').select('*'),
           supabase.from('branches').select('*')
@@ -109,7 +109,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         if (lRes.data) setLosses(lRes.data);
         if (cRes.data) setClaims(cRes.data);
         if (aRes.data) setAssets(aRes.data);
-        if (locRes.data) setLocations(locRes.data);
+        if (sources) setLocations(sources as any);
         if (mRes.data) setMovements(mRes.data);
         if (tRes.data) setThaans(tRes.data);
         

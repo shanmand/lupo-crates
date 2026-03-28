@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { MapPin, Package, Building2, TrendingUp, Zap, Loader2, Search, Filter, ArrowRight, Layers, X } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 
 const InventoryMap: React.FC = () => {
   const [locations, setLocations] = useState<any[]>([]);
@@ -18,16 +18,14 @@ const InventoryMap: React.FC = () => {
       setIsLoading(true);
       try {
         // Fetch batches and locations to aggregate client-side
-        const [batchesRes, locationsRes] = await Promise.all([
+        const [batchesRes, allLocations] = await Promise.all([
           supabase.from('batches').select('asset_id, current_location_id, quantity'),
-          supabase.from('vw_all_sources').select('*')
+          fetchAllSources()
         ]);
 
         if (batchesRes.error) throw batchesRes.error;
-        if (locationsRes.error) throw locationsRes.error;
 
         const batches = batchesRes.data || [];
-        const allLocations = locationsRes.data || [];
 
         // Aggregate data by location (replicating vw_inventory_map_data)
         const aggregatedData = allLocations.map(loc => {

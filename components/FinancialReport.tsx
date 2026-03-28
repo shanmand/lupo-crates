@@ -24,7 +24,7 @@ import {
   Info
 } from 'lucide-react';
 import { LocationType, LocationCategory, Batch, Location, FeeSchedule, ThaanSlip, AssetMaster, AssetLoss, Branch } from '../types';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 
 interface FinancialReportProps {
   branchContext?: 'Kya Sands' | 'Durban' | 'Consolidated';
@@ -64,9 +64,9 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
 
       setIsLoading(true);
       try {
-        const [bRes, lRes, fRes, tRes, aRes, lossRes, brRes] = await Promise.all([
+        const [bRes, sources, fRes, tRes, aRes, lossRes, brRes] = await Promise.all([
           supabase.from('batches').select('*'),
-          supabase.from('vw_all_sources').select('*'),
+          fetchAllSources(),
           supabase.from('fee_schedule').select('*'),
           supabase.from('thaan_slips').select('*'),
           supabase.from('asset_master').select('*'),
@@ -78,7 +78,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
           // Map view columns back to Batch type
           const mapped = bRes.data.map((item: any) => {
             const fee = fRes.data?.find((f: any) => f.asset_id === item.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
-            const loc = lRes.data?.find((l: any) => l.id === item.current_location_id);
+            const loc = sources.find((l: any) => l.id === item.current_location_id);
             
             return {
               id: item.id,
@@ -95,7 +95,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
           });
           setBatches(mapped as any);
         }
-        if (lRes.data) setLocations(lRes.data as any);
+        if (sources) setLocations(sources as any);
         if (fRes.data) setFees(fRes.data);
         if (tRes.data) setThaans(tRes.data);
         if (aRes.data) setAssets(aRes.data);

@@ -58,13 +58,51 @@ const FleetCompliance: React.FC = () => {
     setIsLoading(true);
     try {
       const [trucksRes, driversRes, branchesRes, historyRes] = await Promise.all([
-        supabase.from('vw_fleet_readiness').select('*'),
+        supabase.from('trucks').select('*'),
         supabase.from('drivers').select('*').eq('is_active', true),
         supabase.from('branches').select('*').order('name'),
         supabase.from('truck_roadworthy_history').select('*').order('test_date', { ascending: false })
       ]);
 
-      if (trucksRes.data) setTrucks(trucksRes.data);
+      if (trucksRes.data && branchesRes.data && historyRes.data) {
+        const trucksData = trucksRes.data;
+        const branchesData = branchesRes.data;
+        const historyData = historyRes.data;
+
+        // Reconstruct fleet readiness client-side
+        const reconstructed = trucksData.map(t => {
+          const branch = branchesData.find(b => b.id === t.branch_id);
+          const truckHistory = historyData.filter(h => h.truck_id === t.id).sort((a, b) => new Date(b.test_date).getTime() - new Date(a.test_date).getTime());
+          const lastRoadworthy = truckHistory[0];
+          const ytdCosts = truckHistory
+            .filter(h => new Date(h.test_date).getFullYear() === new Date().getFullYear())
+            .reduce((sum, h) => sum + (h.test_fee_zar || 0) + (h.repair_costs_zar || 0), 0);
+
+          const now = new Date();
+          const expiry = t.license_disc_expiry ? new Date(t.license_disc_expiry) : null;
+          let licenseStatus = 'Compliant';
+          if (expiry) {
+            const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) licenseStatus = 'Expired';
+            else if (diffDays <= 30) licenseStatus = 'Critical';
+            else if (diffDays <= 90) licenseStatus = 'Warning';
+          }
+
+          return {
+            truck_id: t.id,
+            plate_number: t.plate_number,
+            branch_id: t.branch_id,
+            branch_name: branch?.name || 'Unknown',
+            license_disc_expiry: t.license_disc_expiry,
+            license_status: licenseStatus,
+            last_renewal_cost: t.last_renewal_cost_zar || 0,
+            ytd_roadworthy_costs: ytdCosts,
+            last_roadworthy_result: lastRoadworthy?.result,
+            roadworthy_expiry: lastRoadworthy?.expiry_date
+          };
+        });
+        setTrucks(reconstructed as any);
+      }
       if (driversRes.data) setDrivers(driversRes.data);
       if (branchesRes.data) setBranches(branchesRes.data);
       if (historyRes.data) setRoadworthyHistory(historyRes.data);

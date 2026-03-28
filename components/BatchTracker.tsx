@@ -34,11 +34,12 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
     setIsLoading(true);
     try {
       console.log('BatchTracker: Fetching detail for batch:', batchId);
-      const [batchRes, thaanRes, movesRes, tracesRes] = await Promise.all([
+      const [batchRes, thaanRes, movesRes, locations, parties] = await Promise.all([
         supabase.from('batches').select('*').eq('id', batchId).single(),
         supabase.from('thaan_slips').select('*').eq('batch_id', batchId),
         supabase.from('batch_movements').select('*').eq('batch_id', batchId),
-        supabase.from('vw_master_logistics_trace').select('*').eq('batch_id', batchId)
+        supabase.from('locations').select('*'),
+        supabase.from('business_parties').select('*')
       ]);
 
       if (batchRes.data) {
@@ -48,8 +49,39 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
         });
       }
       if (thaanRes.data) setThaans(thaanRes.data);
-      if (movesRes.data) setMovements(movesRes.data);
-      if (tracesRes.data) setTraces(tracesRes.data);
+      
+      if (movesRes.data) {
+        setMovements(movesRes.data);
+        
+        // Reconstruct traces client-side
+        const allSources = [
+          ...(locations.data || []).map(l => ({ ...l, type: 'Location' })),
+          ...(parties.data || []).map(p => ({ ...p, type: 'Party' }))
+        ];
+
+        const reconstructedTraces = movesRes.data.map(bm => {
+          const sTo = allSources.find(s => s.id === bm.to_location_id);
+          const sFrom = allSources.find(s => s.id === bm.from_location_id);
+          const driver = drivers.find(d => d.id === bm.driver_id);
+          const truck = trucks.find(t => t.id === bm.truck_id);
+          
+          return {
+            movement_id: bm.id,
+            batch_id: bm.batch_id,
+            transaction_date: bm.transaction_date,
+            timestamp: bm.timestamp,
+            driver_name: driver?.full_name || 'Unknown',
+            quantity: bm.quantity || batchRes.data?.quantity,
+            to_location_name: sTo?.name || 'Unknown',
+            to_location_id: sTo?.id,
+            from_location_name: sFrom?.name || 'Unknown',
+            truck_plate: truck?.plate_number || 'Unknown',
+            condition: bm.condition,
+            custodian_branch_id: sTo?.branch_id
+          } as LogisticsTrace;
+        });
+        setTraces(reconstructedTraces);
+      }
     } catch (err) {
       console.error("Error fetching batch detail:", err);
     } finally {

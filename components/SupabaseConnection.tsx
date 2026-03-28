@@ -72,18 +72,16 @@ const SupabaseConnection: React.FC = () => {
     setStatus('checking');
     const start = performance.now();
     try {
-      // Check core tables and views
+      // Check core tables
       const requiredObjects = [
         { name: 'users', type: 'table' },
         { name: 'branches', type: 'table' },
         { name: 'asset_master', type: 'table' },
         { name: 'locations', type: 'table' },
         { name: 'batches', type: 'table' },
-        { name: 'vw_global_inventory_tracker', type: 'view' },
-        { name: 'vw_all_sources', type: 'view' },
-        { name: 'vw_all_origins', type: 'view' },
-        { name: 'vw_movement_destinations', type: 'view' },
-        { name: 'vw_batch_accruals', type: 'view' }
+        { name: 'batch_movements', type: 'table' },
+        { name: 'business_parties', type: 'table' },
+        { name: 'collection_requests', type: 'table' }
       ];
 
       const results = await Promise.all(

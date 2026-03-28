@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Award, TrendingDown, Clock, ShieldAlert, User as UserIcon, MapPin, Calculator, ArrowRight, Info, AlertTriangle, TrendingUp, Search, Loader2 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { ExecutiveReportRow } from '../types';
 
 interface ExecutiveReportProps {
@@ -63,9 +63,9 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
 
       setIsLoading(true);
       try {
-        const [bRes, lRes, fRes, lossRes, brRes] = await Promise.all([
+        const [bRes, sources, fRes, lossRes, brRes] = await Promise.all([
           supabase.from('batches').select('*'),
-          supabase.from('vw_all_sources').select('*'),
+          fetchAllSources(),
           supabase.from('fee_schedule').select('*'),
           supabase.from('asset_losses').select('*'),
           supabase.from('branches').select('*')
@@ -74,13 +74,13 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
         if (bRes.data && brRes.data) {
           const mapped = brRes.data.map((branch: any) => {
             const branchBatches = bRes.data.filter((b: any) => {
-              const loc = lRes.data?.find((l: any) => l.id === b.current_location_id);
+              const loc = sources.find((l: any) => l.id === b.current_location_id);
               return loc?.branch_id === branch.id;
             });
 
             const totalAssets = branchBatches.reduce((sum: number, b: any) => sum + b.quantity, 0);
             const branchLosses = lossRes.data?.filter((l: any) => {
-              const loc = lRes.data?.find((loc: any) => loc.id === l.location_id);
+              const loc = sources.find((loc: any) => loc.id === l.location_id);
               return loc?.branch_id === branch.id;
             }) || [];
             const lostUnits = branchLosses.reduce((sum: number, l: any) => sum + l.lost_quantity, 0);

@@ -357,6 +357,19 @@ export interface AuditLog {
   created_at?: string;
 }
 
+export interface AllSource {
+  id: string;
+  name: string;
+  partner_type: string;
+  branch_id: string | null;
+  type: string;
+  category: string;
+  address: string | null;
+  display_name: string;
+  sort_group: number;
+  source_table: 'Location' | 'BusinessParty';
+}
+
 export interface DashboardStats {
   total_units: number;
   pending_units: number;

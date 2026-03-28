@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Skull, AlertTriangle, Search, MapPin, Package, History, TrendingDown, Loader2, CheckCircle2, Plus, Calendar, ArrowRight, X, Database, ShieldAlert } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { User, Location, AssetMaster } from '../types';
 
 interface LossRecorderProps {
@@ -33,20 +33,20 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
     }
     setIsLoading(true);
     try {
-      const [lossRes, batchRes, sourceRes, assetsRes] = await Promise.all([
+      const [lossRes, batchRes, sources, assetsRes] = await Promise.all([
         supabase.from('asset_losses').select('*').order('timestamp', { ascending: false }),
         supabase.from('batches').select('*, asset:asset_master(name)').eq('status', 'Success').gt('quantity', 0),
-        supabase.from('vw_all_sources').select('*'),
+        fetchAllSources(),
         supabase.from('asset_master').select('id, name')
       ]);
 
       if (batchRes.data) setBatches(batchRes.data);
-      if (sourceRes.data) setSources(sourceRes.data);
+      if (sources) setSources(sources);
       
-      if (lossRes.data && batchRes.data && sourceRes.data && assetsRes.data) {
+      if (lossRes.data && batchRes.data && sources && assetsRes.data) {
         const losses = lossRes.data;
         const batches = batchRes.data;
-        const locations = sourceRes.data;
+        const locations = sources;
         const assets = assetsRes.data;
 
         // Join data (replicating vw_loss_report)
