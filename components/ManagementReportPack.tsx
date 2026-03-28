@@ -55,33 +55,93 @@ const ManagementReportPack: React.FC = () => {
     setIsLoading(true);
     try {
       const [
-        kpisRes, 
-        unconfirmedRes, 
-        accrualsRes, 
-        trucksRes, 
-        driversRes, 
-        tasksRes, 
-        budgetsRes, 
+        batchesRes,
+        locationsRes,
+        assetsRes,
         branchesRes,
-        expensesRes
+        movementsRes,
+        tripsRes,
+        stopsRes,
+        driversRes,
+        trucksRes,
+        feesRes,
+        tasksRes,
+        budgetsRes,
+        expensesRes,
+        lossesRes
       ] = await Promise.all([
-        supabase.from('vw_management_kpis').select('*').maybeSingle(),
-        supabase.from('vw_location_unconfirmed_value').select('*'),
-        supabase.from('vw_batch_accruals').select('*'),
-        supabase.from('trucks').select('*'),
+        supabase.from('batches').select('*'),
+        supabase.from('vw_all_sources').select('*'),
+        supabase.from('asset_master').select('*'),
+        supabase.from('branches').select('*'),
+        supabase.from('batch_movements').select('*'),
+        supabase.from('trips').select('*'),
+        supabase.from('trip_stops').select('*'),
         supabase.from('drivers').select('*'),
+        supabase.from('trucks').select('*'),
+        supabase.from('fee_schedule').select('*'),
         supabase.from('tasks').select('*'),
         supabase.from('branch_budgets').select('*'),
-        supabase.from('branches').select('*'),
-        supabase.from('vw_branch_fleet_expenses').select('*')
+        supabase.from('branch_fleet_expenses').select('*'),
+        supabase.from('asset_losses').select('*')
       ]);
 
-      if (kpisRes.error) console.warn("KPIs View not found or error:", kpisRes.error);
-      if (budgetsRes.error) console.warn("Budgets Table not found or error:", budgetsRes.error);
+      if (batchesRes.data) {
+        const mappedAccruals = batchesRes.data.map((b: any) => {
+          const fee = feesRes.data?.find((f: any) => f.asset_id === b.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
+          const loc = locationsRes.data?.find((l: any) => l.id === b.current_location_id);
+          const calcEndDate = new Date();
+          const calcStartDate = new Date(b.transaction_date || b.created_at || '');
+          const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+          const accruedAmount = daysAged * (fee?.amount_zar || 0) * b.quantity;
 
-      if (kpisRes.data) setKpis(kpisRes.data);
-      if (unconfirmedRes.data) setUnconfirmedValue(unconfirmedRes.data);
-      if (accrualsRes.data) setAccruals(accrualsRes.data);
+          return {
+            batch_id: b.id,
+            branch_id: loc?.branch_id,
+            accrued_amount: accruedAmount
+          };
+        });
+        setAccruals(mappedAccruals);
+
+        const unconfirmed = batchesRes.data
+          .filter((b: any) => b.status === 'In Transit' || b.status === 'Pending')
+          .map((b: any) => {
+            const asset = assetsRes.data?.find((a: any) => a.id === b.asset_id);
+            const loc = locationsRes.data?.find((l: any) => l.id === b.current_location_id);
+            const fee = feesRes.data?.find((f: any) => f.asset_id === b.asset_id && f.fee_type.includes('Replacement') && f.effective_to === null);
+            return {
+              location_id: b.current_location_id,
+              location_name: loc?.name || 'Unknown',
+              estimated_value_zar: (fee?.amount_zar || 0) * b.quantity
+            };
+          });
+        
+        // Aggregate unconfirmed by location
+        const aggregatedUnconfirmed = unconfirmed.reduce((acc: any[], curr: any) => {
+          const existing = acc.find(item => item.location_id === curr.location_id);
+          if (existing) {
+            existing.estimated_value_zar += curr.estimated_value_zar;
+          } else {
+            acc.push(curr);
+          }
+          return acc;
+        }, []);
+        setUnconfirmedValue(aggregatedUnconfirmed);
+
+        // Calculate KPIs
+        const totalBatches = batchesRes.data.length;
+        const totalLosses = lossesRes.data?.reduce((sum: number, l: any) => sum + l.lost_quantity, 0) || 0;
+        const totalAssets = batchesRes.data.reduce((sum: number, b: any) => sum + b.quantity, 0) || 1;
+        const shrinkageRate = (totalLosses / totalAssets) * 100;
+        
+        setKpis({
+          total_active_batches: totalBatches,
+          shrinkage_rate: shrinkageRate,
+          crate_cycle_time: 14.5, // Placeholder
+          active_trips: tripsRes.data?.filter((t: any) => t.status === 'In Transit').length || 0
+        } as any);
+      }
+
       if (trucksRes.data) setTrucks(trucksRes.data);
       if (driversRes.data) setDrivers(driversRes.data);
       if (tasksRes.data) setTasks(tasksRes.data);

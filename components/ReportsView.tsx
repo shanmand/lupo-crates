@@ -80,33 +80,60 @@ const ReportsView: React.FC = () => {
       }
       setIsLoading(true);
       try {
-        const [bRes, lRes, aRes, brRes, tRes, tripsRes, stopsRes, driversRes, trucksRes] = await Promise.all([
-          supabase.from('vw_global_inventory_tracker').select('*'),
+        const [bRes, lRes, aRes, brRes, mRes, tripsRes, stopsRes, driversRes, trucksRes, feesRes] = await Promise.all([
+          supabase.from('batches').select('*'),
           supabase.from('vw_all_sources').select('*'),
           supabase.from('asset_master').select('*'),
           supabase.from('branches').select('*'),
-          supabase.from('vw_master_logistics_trace')
-            .select('*')
-            .order('timestamp', { ascending: false })
-            .limit(1000),
+          supabase.from('batch_movements').select('*').order('timestamp', { ascending: false }).limit(1000),
           supabase.from('trips').select('*').order('scheduled_date', { ascending: false }),
           supabase.from('trip_stops').select('*'),
           supabase.from('drivers').select('*'),
-          supabase.from('trucks').select('*')
+          supabase.from('trucks').select('*'),
+          supabase.from('fee_schedule').select('*')
         ]);
 
         if (bRes.data) {
-          const mapped = bRes.data.map((b: any) => ({
-            ...b,
-            id: b.batch_id,
-            status: b.batch_status
-          }));
+          const mapped = bRes.data.map((b: any) => {
+            const asset = aRes.data?.find((a: any) => a.id === b.asset_id);
+            const loc = lRes.data?.find((l: any) => l.id === b.current_location_id);
+            const fee = feesRes.data?.find((f: any) => f.asset_id === b.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
+            
+            const calcEndDate = new Date();
+            const calcStartDate = new Date(b.transaction_date || b.created_at || '');
+            const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+            const zarLiability = daysAged * (fee?.amount_zar || 0) * b.quantity;
+
+            return {
+              ...b,
+              id: b.id,
+              batch_id: b.id,
+              asset_name: asset?.name || 'Unknown',
+              location_name: loc?.name || 'Unknown',
+              branch_id: loc?.branch_id,
+              batch_status: b.status,
+              daily_accrued_liability: fee?.amount_zar || 0,
+              days_aged: daysAged,
+              zar_liability: zarLiability,
+              is_unconfirmed: b.status === 'In Transit' || b.status === 'Pending'
+            };
+          });
           setBatches(mapped);
         }
-        if (lRes.data) setLocations(lRes.data);
-        if (aRes.data) setAssets(aRes.data);
-        
-        if (tRes.data) setTraces(tRes.data);
+
+        if (mRes.data) {
+          const mapped = mRes.data.map((m: any) => {
+            const fromLoc = lRes.data?.find((l: any) => l.id === m.from_location_id);
+            const toLoc = lRes.data?.find((l: any) => l.id === m.to_location_id);
+            return {
+              ...m,
+              from_location_name: fromLoc?.name || 'Unknown',
+              to_location_name: toLoc?.name || 'Unknown',
+              custodian_branch_id: fromLoc?.branch_id
+            };
+          });
+          setTraces(mapped);
+        }
         if (tripsRes.data) setTrips(tripsRes.data);
         if (stopsRes.data) setTripStops(stopsRes.data);
         if (driversRes.data) setDrivers(driversRes.data);

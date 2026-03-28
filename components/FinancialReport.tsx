@@ -65,7 +65,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
       setIsLoading(true);
       try {
         const [bRes, lRes, fRes, tRes, aRes, lossRes, brRes] = await Promise.all([
-          supabase.from('vw_global_inventory_tracker').select('*'),
+          supabase.from('batches').select('*'),
           supabase.from('vw_all_sources').select('*'),
           supabase.from('fee_schedule').select('*'),
           supabase.from('thaan_slips').select('*'),
@@ -76,17 +76,23 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
 
         if (bRes.data) {
           // Map view columns back to Batch type
-          const mapped = bRes.data.map((item: any) => ({
-            id: item.batch_id,
-            asset_id: item.asset_id,
-            quantity: item.quantity,
-            current_location_id: item.current_location_id,
-            branch_id: item.branch_id,
-            status: item.batch_status,
-            transaction_date: item.transaction_date,
-            daily_accrued_liability: item.daily_accrued_liability,
-            created_at: item.transaction_date
-          }));
+          const mapped = bRes.data.map((item: any) => {
+            const fee = fRes.data?.find((f: any) => f.asset_id === item.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
+            const loc = lRes.data?.find((l: any) => l.id === item.current_location_id);
+            
+            return {
+              id: item.id,
+              batch_id: item.id,
+              asset_id: item.asset_id,
+              quantity: item.quantity,
+              current_location_id: item.current_location_id,
+              branch_id: loc?.branch_id,
+              status: item.status,
+              transaction_date: item.transaction_date,
+              daily_accrued_liability: fee?.amount_zar || 0,
+              created_at: item.created_at
+            };
+          });
           setBatches(mapped as any);
         }
         if (lRes.data) setLocations(lRes.data as any);
