@@ -10,7 +10,7 @@ import {
   MOCK_MOVEMENTS,
   MOCK_THAANS 
 } from '../constants';
-import { FeeType, LocationType, LossType, Batch, FeeSchedule, AssetLoss, Claim, AssetMaster, Location, BatchMovement, ThaanSlip, Branch } from '../types';
+import { FeeType, LocationType, LossType, PartnerType, Batch, FeeSchedule, AssetLoss, Claim, AssetMaster, Location, BatchMovement, ThaanSlip, Branch } from '../types';
 import { 
   Receipt, 
   TrendingUp, 
@@ -54,6 +54,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [activeView, setActiveView] = useState<'settlement' | 'audit'>('settlement');
 
@@ -139,9 +140,10 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL);
         
         const matchesBranch = selectedBranch === 'all' || loc?.branch_id === selectedBranch;
+        const matchesSupplier = selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
         
         // Fix: Use startDate and endDate for filtering batches by created_at
-        const batchDate = new Date(b.created_at);
+        const batchDate = new Date(b.created_at || b.transaction_date || '');
         const start = startDate ? new Date(startDate) : null;
         const end = endDate ? new Date(endDate) : null;
         
@@ -151,32 +153,38 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         // Logic: External Assets at External Locations are removed from our account
         const isOurAccount = !(asset?.ownership_type === 'External' && loc?.category === 'External');
 
-        return !!fee && matchesBranch && matchesDate && isOurAccount;
+        return !!fee && matchesBranch && matchesSupplier && matchesDate && isOurAccount;
     }).map(b => {
+        const asset = assets.find(a => a.id === b.asset_id);
         const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL && f.effective_to === null);
         const loss = losses.find(l => l.batch_id === b.id);
         
-        const endDate = loss ? new Date(loss.timestamp) : new Date();
-        const startDate = new Date(b.created_at);
-        const billableDays = Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+        const calcEndDate = loss ? new Date(loss.timestamp) : new Date();
+        const calcStartDate = new Date(b.created_at || b.transaction_date || '');
+        const billableDays = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
         const totalZar = billableDays * (fee?.amount_zar || 0) * b.quantity;
         
         const branch = locations.find(l => l.id === b.current_location_id)?.name || "Unallocated";
 
         return { 
             id: b.id, 
-            asset: assets.find(a => a.id === b.asset_id)?.name,
+            asset: asset?.name,
             qty: b.quantity,
             days: billableDays,
             rate: fee?.amount_zar || 0,
             total: totalZar,
             branch,
-            isStopped: !!loss
+            isStopped: !!loss,
+            supplier_id: asset?.supplier_id
         };
     });
 
     // 2. Loss & Replacement Settlement
-    const lossItems = losses.map(l => {
+    const lossItems = losses.filter(l => {
+        const batch = batches.find(b => b.id === l.batch_id);
+        const asset = assets.find(a => a.id === batch?.asset_id);
+        return selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
+    }).map(l => {
         const batch = batches.find(b => b.id === l.batch_id);
         const fee = fees.find(f => f.asset_id === batch?.asset_id && f.fee_type === FeeType.REPLACEMENT_FEE);
         const amount = l.lost_quantity * (fee?.amount_zar || 0);
@@ -197,7 +205,10 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     const penalties = movements.filter(m => {
         const toLoc = locations.find(l => l.id === m.to_location_id);
         const thaan = thaans.find(t => t.batch_id === m.batch_id);
-        return toLoc?.type === LocationType.RETURNING && !thaan;
+        const batch = batches.find(b => b.id === m.batch_id);
+        const asset = assets.find(a => a.id === batch?.asset_id);
+        const matchesSupplier = selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
+        return toLoc?.type === LocationType.RETURNING && !thaan && matchesSupplier;
     }).map(m => {
         const penaltyFee = 250.00; 
         const branch = locations.find(l => l.id === m.from_location_id)?.name || "Unallocated";
@@ -210,7 +221,12 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     });
 
     // 4. Claims Offsets
-    const offsets = claims.filter(c => c.status === 'Accepted').map(c => {
+    const offsets = claims.filter(c => {
+        const batch = batches.find(b => b.id === c.batch_id);
+        const asset = assets.find(a => a.id === batch?.asset_id);
+        const matchesSupplier = selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
+        return c.status === 'Accepted' && matchesSupplier;
+    }).map(c => {
         const branch = "Johannesburg Plant"; 
         return {
             id: c.id,
@@ -228,6 +244,21 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     
     const grandTotal = rentalSubtotal + lossSubtotal + penaltySubtotal - offsetSubtotal;
 
+    // Age Analysis
+    const ageAnalysis = {
+        current: 0,
+        days30: 0,
+        days60: 0,
+        days90Plus: 0
+    };
+
+    rentals.forEach(r => {
+        if (r.days <= 30) ageAnalysis.current += r.total;
+        else if (r.days <= 60) ageAnalysis.days30 += r.total;
+        else if (r.days <= 90) ageAnalysis.days60 += r.total;
+        else ageAnalysis.days90Plus += r.total;
+    });
+
     // Branch Allocation
     const branchBreakdown: Record<string, number> = {};
     [...rentals, ...lossItems, ...penalties].forEach(item => {
@@ -240,9 +271,9 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     return { 
         rentals, losses: lossItems, penalties, offsets, 
         rentalSubtotal, lossSubtotal, penaltySubtotal, offsetSubtotal, 
-        grandTotal, branchBreakdown 
+        grandTotal, branchBreakdown, ageAnalysis
     };
-  }, [batches, fees, losses, claims, assets, locations, movements, thaans]);
+  }, [batches, fees, losses, claims, assets, locations, movements, thaans, selectedBranch, selectedSupplier, startDate, endDate]);
 
   const handleExport = () => {
     const headers = ['Type', 'ID', 'Asset', 'Quantity', 'Days/Reason', 'Rate/Fee', 'Total (ZAR)', 'Branch'];
@@ -302,6 +333,19 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         </div>
         
         <div className="flex gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase">Supplier</span>
+            <select 
+              className="text-xs font-bold outline-none bg-transparent"
+              value={selectedSupplier}
+              onChange={e => setSelectedSupplier(e.target.value)}
+            >
+              <option value="all">All Suppliers</option>
+              {locations.filter(l => l.partner_type === PartnerType.SUPPLIER).map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2">
             <span className="text-[10px] font-black text-slate-400 uppercase">Period</span>
             <input 
@@ -395,6 +439,22 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                 type="credit" 
                 icon={<MinusCircle size={24} />}
             />
+          </div>
+
+          {/* Age Analysis Row */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h4 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                <Clock size={18} className="text-blue-500" /> Supplier Statement Age Analysis
+              </h4>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Outstanding Liability by Age</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <AgeBox label="Current" value={reportData.ageAnalysis.current} color="emerald" />
+              <AgeBox label="30 Days" value={reportData.ageAnalysis.days30} color="amber" />
+              <AgeBox label="60 Days" value={reportData.ageAnalysis.days60} color="orange" />
+              <AgeBox label="90 Days+" value={reportData.ageAnalysis.days90Plus} color="rose" />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -554,7 +614,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {auditRecords.map((record, idx) => (
+                {auditRecords.filter(r => selectedSupplier === 'all' || r.supplier_id === selectedSupplier).map((record, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-8 py-5">
                       <span className="font-black text-slate-900 text-sm">#{record.batch_id}</span>
@@ -625,6 +685,22 @@ const SummaryCard: React.FC<{ title: string, value: string, desc: string, type: 
             <p className={`text-[10px] mt-1 font-medium ${type === 'main' ? 'text-slate-500' : 'text-slate-400'}`}>{desc}</p>
         </div>
     );
+};
+
+const AgeBox: React.FC<{ label: string, value: number, color: 'emerald' | 'amber' | 'orange' | 'rose' }> = ({ label, value, color }) => {
+  const colors = {
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    amber: "bg-amber-50 text-amber-700 border-amber-100",
+    orange: "bg-orange-50 text-orange-700 border-orange-100",
+    rose: "bg-rose-50 text-rose-700 border-rose-100"
+  };
+
+  return (
+    <div className={`p-4 rounded-xl border ${colors[color]} flex flex-col items-center justify-center text-center`}>
+      <span className="text-[10px] font-black uppercase tracking-tighter mb-1 opacity-60">{label}</span>
+      <span className="text-lg font-black tracking-tight">R {value.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</span>
+    </div>
+  );
 };
 
 const LogicItem: React.FC<{ label: string, desc: string }> = ({ label, desc }) => (

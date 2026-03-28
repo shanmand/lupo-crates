@@ -801,6 +801,7 @@ SELECT
     b.id as batch_id,
     s.name as location_name,
     am.name as asset_name,
+    am.supplier_id,
     b.quantity,
     (CURRENT_DATE - b.transaction_date)::INTEGER as days_aged,
     public.calculate_batch_accrual(b.id) as zar_liability
