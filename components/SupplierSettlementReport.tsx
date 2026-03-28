@@ -137,7 +137,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL);
         
         const matchesBranch = selectedBranch === 'all' || loc?.branch_id === selectedBranch;
-        const matchesSupplier = selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
+        const matchesSupplier = selectedSupplier === 'all' || (asset && asset.supplier_id === selectedSupplier);
         
         // Fix: Use startDate and endDate for filtering batches by created_at
         const batchDate = new Date(b.transaction_date || b.created_at || '');
@@ -150,6 +150,8 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         // Logic: External Assets at Returning locations (Supplier Yard) are removed from our account
         const isOurAccount = !(asset?.ownership_type === 'External' && loc?.type === LocationType.RETURNING);
 
+        // If filtering by a specific supplier, we want to see their assets even if they are at the returning location (for audit)
+        // but for RENTAL settlement, they must be in our account.
         return !!fee && matchesBranch && matchesSupplier && matchesDate && isOurAccount;
     }).map(b => {
         const asset = assets.find(a => a.id === b.asset_id);
@@ -260,7 +262,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     const auditRecords = batches.map(b => {
         const asset = assets.find(a => a.id === b.asset_id);
         const loc = locations.find(l => l.id === b.current_location_id);
-        const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL && f.effective_to === null);
+        const fee = fees.find(f => f.asset_id === b.asset_id && (f.fee_type === FeeType.DAILY_RENTAL || f.fee_type.includes('Daily Rental')) && f.effective_to === null);
         const loss = losses.find(l => l.batch_id === b.id);
         const thaan = thaans.find(t => t.batch_id === b.id);
         
@@ -280,6 +282,8 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         };
     });
 
+    const missingDataCount = batches.filter(b => !assets.find(a => a.id === b.asset_id)).length;
+
     // Branch Allocation
     const branchBreakdown: Record<string, number> = {};
     [...rentals, ...lossItems, ...penalties].forEach(item => {
@@ -292,7 +296,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     return { 
         rentals, losses: lossItems, penalties, offsets, 
         rentalSubtotal, lossSubtotal, penaltySubtotal, offsetSubtotal, 
-        grandTotal, branchBreakdown, ageAnalysis, auditRecords
+        grandTotal, branchBreakdown, ageAnalysis, auditRecords, missingDataCount
     };
   }, [batches, fees, losses, claims, assets, locations, movements, thaans, selectedBranch, selectedSupplier, startDate, endDate]);
 
@@ -354,6 +358,12 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         </div>
         
         <div className="flex gap-3 w-full md:w-auto">
+          {reportData.missingDataCount > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 animate-pulse">
+              <ShieldAlert size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">{reportData.missingDataCount} Orphan Batches</span>
+            </div>
+          )}
           <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2">
             <span className="text-[10px] font-black text-slate-400 uppercase">Supplier</span>
             <select 

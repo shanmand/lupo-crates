@@ -1332,13 +1332,20 @@ INSERT INTO public.locations (id, name, type, category, branch_id, partner_type,
 ('LOC-JHB-01', 'Lupo JHB Plant', 'Crates Dept', 'Home', 'BR-01', 'Internal', -26.0234, 27.9567),
 ('LOC-DBN-01', 'Lupo DBN Plant', 'Crates Dept', 'Home', 'BR-02', 'Internal', -29.8587, 31.0218),
 ('LOC-CUST-01', 'Checkers Sandton', 'At Customer', 'External', 'BR-01', 'Customer', -26.1076, 28.0567),
+('LOC-CUST-02', 'Pick n Pay Woodmead', 'At Customer', 'External', 'BR-01', 'Customer', -26.0567, 28.0890),
+('LOC-COLD-01', 'Cold Storage North', 'Cold Storage', 'Home', 'BR-01', 'Internal', -26.0345, 27.9678),
+('LOC-TRANS-01', 'Truck JHB-01', 'In Transit', 'Home', 'BR-01', 'Internal', -26.0456, 27.9789),
 ('LOC-SUP-01', 'Crate Suppliers', 'Returning to Supplier', 'External', 'BR-01', 'Supplier', -26.1500, 28.2000)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.asset_master (id, name, type, dimensions, material, supplier_id, ownership_type) VALUES 
 ('CRT-STD', 'Standard Bread Crate', 'Crate', '600x400x150mm', 'HDPE', 'BP-SUP-001', 'External'),
 ('PLT-STD', 'Standard Wood Pallet', 'Pallet', '1200x1000mm', 'Wood', 'BP-SUP-001', 'External'),
-('SH-001', 'Lupo Premium Crate', 'Crate', '600x400x150mm', 'HDPE-Amber', 'LOC-SUP-01', 'External')
+('SH-001', 'Lupo Premium Crate', 'Crate', '600x400x150mm', 'HDPE-Amber', 'LOC-SUP-01', 'External'),
+('SH-002', 'Lupo Standard Crate', 'Crate', '600x400x150mm', 'HDPE-Blue', 'LOC-SUP-01', 'External'),
+('SH-003', 'Lupo Economy Crate', 'Crate', '600x400x150mm', 'HDPE-Black', 'LOC-SUP-01', 'External'),
+('SH-P01', 'Lupo Heavy Pallet', 'Pallet', '1200x1000mm', 'Plastic', 'BP-SUP-001', 'External'),
+('SH-P02', 'Lupo Lite Pallet', 'Pallet', '1200x1000mm', 'Plastic', 'LOC-SUP-01', 'External')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.branch_budgets (branch_id, budget_amount) VALUES
@@ -1347,12 +1354,20 @@ INSERT INTO public.branch_budgets (branch_id, budget_amount) VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.fee_schedule (asset_id, fee_type, amount_zar, effective_from) VALUES 
-('CRT-STD', 'Replacement Fee', 150.00, '2024-01-01'),
+('CRT-STD', 'Replacement Fee (Lost Equipment)', 150.00, '2024-01-01'),
 ('CRT-STD', 'Daily Rental (Supermarket)', 4.50, '2024-01-01'),
 ('PLT-STD', 'Daily Rental (Supermarket)', 12.00, '2024-01-01'),
 ('SH-001', 'Daily Rental (Supermarket)', 5.25, '2024-01-01'),
-('PLT-STD', 'Replacement Fee', 450.00, '2024-01-01'),
-('SH-001', 'Replacement Fee', 180.00, '2024-01-01')
+('SH-002', 'Daily Rental (Supermarket)', 4.95, '2024-01-01'),
+('SH-003', 'Daily Rental (Supermarket)', 4.25, '2024-01-01'),
+('SH-P01', 'Daily Rental (Supermarket)', 15.00, '2024-01-01'),
+('SH-P02', 'Daily Rental (Supermarket)', 10.50, '2024-01-01'),
+('PLT-STD', 'Replacement Fee (Lost Equipment)', 450.00, '2024-01-01'),
+('SH-001', 'Replacement Fee (Lost Equipment)', 180.00, '2024-01-01'),
+('SH-002', 'Replacement Fee (Lost Equipment)', 170.00, '2024-01-01'),
+('SH-003', 'Replacement Fee (Lost Equipment)', 140.00, '2024-01-01'),
+('SH-P01', 'Replacement Fee (Lost Equipment)', 850.00, '2024-01-01'),
+('SH-P02', 'Replacement Fee (Lost Equipment)', 650.00, '2024-01-01')
 ON CONFLICT DO NOTHING;
 
 -- INITIAL INVENTORY
