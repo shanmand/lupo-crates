@@ -99,7 +99,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
           supabase.from('asset_losses').select('*'),
           supabase.from('claims').select('*'),
           supabase.from('asset_master').select('*'),
-          supabase.from('locations').select('*'),
+          supabase.from('vw_all_sources').select('*'),
           supabase.from('batch_movements').select('*'),
           supabase.from('thaan_slips').select('*'),
           supabase.from('branches').select('*'),
@@ -341,7 +341,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
               onChange={e => setSelectedSupplier(e.target.value)}
             >
               <option value="all">All Suppliers</option>
-              {locations.filter(l => l.partner_type === PartnerType.SUPPLIER).map(s => (
+              {locations.filter(l => l.partner_type === PartnerType.SUPPLIER || (l as any).type === 'Supplier' || (l as any).type === 'Business Party').map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>

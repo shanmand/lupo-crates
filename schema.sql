@@ -105,7 +105,7 @@ CREATE TABLE public.asset_master (
     material TEXT,
     billing_model TEXT DEFAULT 'Daily Rental', -- Daily Rental, Issue Fee, None
     ownership_type TEXT DEFAULT 'Internal', -- Internal, External
-    supplier_id TEXT REFERENCES public.locations(id),
+    supplier_id TEXT, -- Reference to vw_all_sources(id)
     is_internal BOOLEAN DEFAULT TRUE,
     fee_type TEXT, -- Daily Rental, Issue Fee
     created_at TIMESTAMPTZ DEFAULT NOW()
