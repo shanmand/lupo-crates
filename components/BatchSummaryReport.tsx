@@ -45,12 +45,37 @@ const BatchSummaryReport: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: summaryData, error } = await supabase
-        .from('vw_intake_summary_report')
-        .select('*');
+      const [movementsRes, sourcesRes] = await Promise.all([
+        supabase.from('batch_movements').select('*'),
+        supabase.from('vw_all_sources').select('*')
+      ]);
 
-      if (error) throw error;
-      setData(summaryData || []);
+      if (movementsRes.data && sourcesRes.data) {
+        // Aggregate movements by week, source type, and source name
+        const summary: Record<string, IntakeSummary> = {};
+        
+        movementsRes.data.forEach((m: any) => {
+          const source = sourcesRes.data.find((s: any) => s.id === m.from_location_id);
+          if (!source) return;
+
+          const date = new Date(m.transaction_date);
+          const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+          const weekKey = format(weekStart, 'yyyy-MM-dd');
+          const key = `${weekKey}_${source.partner_type}_${source.name}`;
+
+          if (!summary[key]) {
+            summary[key] = {
+              week_starting: weekKey,
+              source_type: source.partner_type,
+              source_name: source.name,
+              total_quantity: 0
+            };
+          }
+          summary[key].total_quantity += m.quantity;
+        });
+
+        setData(Object.values(summary));
+      }
     } catch (error) {
       console.error('Error fetching intake summary:', error);
     } finally {
@@ -230,7 +255,7 @@ const BatchSummaryReport: React.FC = () => {
             </div>
           </div>
           
-          <div className="h-[300px] w-full">
+          <div className="h-[300px] min-h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />

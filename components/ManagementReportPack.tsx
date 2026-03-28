@@ -67,7 +67,6 @@ const ManagementReportPack: React.FC = () => {
         feesRes,
         tasksRes,
         budgetsRes,
-        expensesRes,
         lossesRes
       ] = await Promise.all([
         supabase.from('batches').select('*'),
@@ -82,7 +81,6 @@ const ManagementReportPack: React.FC = () => {
         supabase.from('fee_schedule').select('*'),
         supabase.from('tasks').select('*'),
         supabase.from('branch_budgets').select('*'),
-        supabase.from('branch_fleet_expenses').select('*'),
         supabase.from('asset_losses').select('*')
       ]);
 
@@ -142,12 +140,29 @@ const ManagementReportPack: React.FC = () => {
         } as any);
       }
 
-      if (trucksRes.data) setTrucks(trucksRes.data);
+      if (trucksRes.data && branchesRes.data) {
+        const mappedExpenses = trucksRes.data
+          .filter((t: any) => t.last_renewal_cost_zar > 0)
+          .map((t: any) => {
+            const branch = branchesRes.data.find((b: any) => b.id === t.branch_id);
+            return {
+              branch_id: t.branch_id,
+              branch_name: branch?.name || 'Unknown',
+              truck_id: t.id,
+              plate_number: t.plate_number,
+              expense_type: 'License Renewal',
+              amount: t.last_renewal_cost_zar || 0,
+              expense_date: t.license_disc_expiry,
+              license_doc_url: t.license_doc_url
+            };
+          });
+        setFleetExpenses(mappedExpenses);
+        setTrucks(trucksRes.data);
+      }
       if (driversRes.data) setDrivers(driversRes.data);
       if (tasksRes.data) setTasks(tasksRes.data);
       if (budgetsRes.data) setBudgets(budgetsRes.data);
       if (branchesRes.data) setBranches(branchesRes.data);
-      if (expensesRes.data) setFleetExpenses(expensesRes.data);
     } catch (err) {
       console.error("Error fetching report data:", err);
     } finally {
@@ -315,7 +330,7 @@ const ManagementReportPack: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl w-full overflow-hidden">
             <h4 className="font-black text-sm uppercase tracking-widest text-slate-900 mb-8">Revenue vs Budget by Branch</h4>
-            <div className="h-[400px] w-full relative">
+            <div className="h-[400px] min-h-[400px] w-full relative">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={branches.map(b => {
                   const branchBudget = budgets.find(bud => bud.branch_id === b.id);
@@ -439,7 +454,7 @@ const ManagementReportPack: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl w-full overflow-hidden">
             <h4 className="font-black text-sm uppercase tracking-widest text-slate-900 mb-8">Location Value Heatmap (Unconfirmed)</h4>
-            <div className="h-[350px] w-full relative">
+            <div className="h-[350px] min-h-[350px] w-full relative">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={unconfirmedValue.sort((a, b) => b.estimated_value_zar - a.estimated_value_zar).slice(0, 8)}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />

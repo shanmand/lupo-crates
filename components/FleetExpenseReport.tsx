@@ -55,17 +55,60 @@ const FleetExpenseReport: React.FC = () => {
     if (!isSupabaseConfigured) return;
     setIsLoading(true);
     try {
-      const [expensesRes, historyRes, branchesRes, readinessRes] = await Promise.all([
-        supabase.from('vw_branch_fleet_expenses').select('*'),
+      const [trucksRes, historyRes, branchesRes] = await Promise.all([
+        supabase.from('trucks').select('*'),
         supabase.from('truck_roadworthy_history').select('*').order('test_date', { ascending: false }),
-        supabase.from('branches').select('*').order('name'),
-        supabase.from('vw_fleet_readiness').select('*')
+        supabase.from('branches').select('*').order('name')
       ]);
 
-      if (expensesRes.data) setExpenses(expensesRes.data);
+      if (trucksRes.data && branchesRes.data) {
+        const mappedExpenses = trucksRes.data
+          .filter((t: any) => t.last_renewal_cost_zar > 0)
+          .map((t: any) => {
+            const branch = branchesRes.data.find((b: any) => b.id === t.branch_id);
+            return {
+              branch_id: t.branch_id,
+              branch_name: branch?.name || 'Unknown',
+              truck_id: t.id,
+              plate_number: t.plate_number,
+              expense_type: 'License Renewal',
+              amount: t.last_renewal_cost_zar || 0,
+              expense_date: t.license_disc_expiry,
+              license_doc_url: t.license_doc_url
+            };
+          });
+        setExpenses(mappedExpenses);
+
+        const mappedReadiness = trucksRes.data.map((t: any) => {
+          const branch = branchesRes.data.find((b: any) => b.id === t.branch_id);
+          const expiryDate = new Date(t.license_disc_expiry);
+          const now = new Date();
+          const diffDays = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          
+          let status = 'Compliant';
+          if (diffDays < 0) status = 'Expired';
+          else if (diffDays < 30) status = 'Critical';
+          else if (diffDays < 90) status = 'Warning';
+
+          const ytdCosts = historyRes.data
+            ?.filter((h: any) => h.truck_id === t.id && new Date(h.test_date).getFullYear() === now.getFullYear())
+            .reduce((sum: number, h: any) => sum + (h.test_fee_zar || 0) + (h.repair_costs_zar || 0), 0) || 0;
+
+          return {
+            truck_id: t.id,
+            plate_number: t.plate_number,
+            branch_id: t.branch_id,
+            branch_name: branch?.name || 'Unknown',
+            license_disc_expiry: t.license_disc_expiry,
+            license_status: status,
+            last_renewal_cost: t.last_renewal_cost_zar || 0,
+            ytd_roadworthy_costs: ytdCosts
+          };
+        });
+        setReadiness(mappedReadiness);
+      }
       if (historyRes.data) setRoadworthyHistory(historyRes.data);
       if (branchesRes.data) setBranches(branchesRes.data);
-      if (readinessRes.data) setReadiness(readinessRes.data);
     } catch (err) {
       console.error("Error fetching report data:", err);
     } finally {
@@ -305,7 +348,7 @@ const FleetExpenseReport: React.FC = () => {
             <BarChart3 size={20} className="text-slate-300" />
           </div>
           
-          <div className="h-[300px] w-full">
+          <div className="h-[300px] min-h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
