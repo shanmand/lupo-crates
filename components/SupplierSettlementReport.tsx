@@ -143,7 +143,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const matchesSupplier = selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
         
         // Fix: Use startDate and endDate for filtering batches by created_at
-        const batchDate = new Date(b.created_at || b.transaction_date || '');
+        const batchDate = new Date(b.transaction_date || b.created_at || '');
         const start = startDate ? new Date(startDate) : null;
         const end = endDate ? new Date(endDate) : null;
         
@@ -160,7 +160,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const loss = losses.find(l => l.batch_id === b.id);
         
         const calcEndDate = loss ? new Date(loss.timestamp) : new Date();
-        const calcStartDate = new Date(b.created_at || b.transaction_date || '');
+        const calcStartDate = new Date(b.transaction_date || b.created_at || '');
         const billableDays = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
         const totalZar = billableDays * (fee?.amount_zar || 0) * b.quantity;
         
@@ -341,7 +341,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
               onChange={e => setSelectedSupplier(e.target.value)}
             >
               <option value="all">All Suppliers</option>
-              {locations.filter(l => l.partner_type === PartnerType.SUPPLIER || (l as any).type === 'Supplier' || (l as any).type === 'Business Party').map(s => (
+              {locations.filter(l => l.partner_type === PartnerType.SUPPLIER).map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>

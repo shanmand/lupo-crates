@@ -20,6 +20,8 @@ export const MOCK_USERS: User[] = [
 ];
 
 export const MOCK_ASSETS: AssetMaster[] = [
+  { id: 'CRT-STD', name: 'Standard Bread Crate', type: AssetType.CRATE, dimensions: '600x400x150mm', material: 'HDPE', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'BP-SUP-001' },
+  { id: 'PLT-STD', name: 'Standard Wood Pallet', type: AssetType.PALLET, dimensions: '1200x1000mm', material: 'Wood', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'BP-SUP-001' },
   { id: 'SH-001', name: 'Lupo Standard Bread Crate', type: AssetType.CRATE, dimensions: '600x400x150mm', material: 'HDPE-Amber', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'LOC-SUP-01' },
   { id: 'SH-002', name: 'Lupo Confectionery Tray', type: AssetType.CRATE, dimensions: '600x400x90mm', material: 'HDPE-Clear', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'BP-SUP-001' },
   { id: 'SH-003', name: 'Lupo Roll Crate (Deep)', type: AssetType.CRATE, dimensions: '600x400x210mm', material: 'HDPE-Blue', billing_model: BillingModel.DAILY_RENTAL, ownership_type: OwnershipType.EXTERNAL, supplier_id: 'LOC-SUP-01' },
@@ -42,6 +44,8 @@ export const MOCK_LOCATIONS: Location[] = [
 ];
 
 export const MOCK_FEES: FeeSchedule[] = [
+  { id: 'FEE-CRT-01', asset_id: 'CRT-STD', fee_type: FeeType.DAILY_RENTAL, amount_zar: 4.50, effective_from: '2024-01-01', effective_to: null },
+  { id: 'FEE-PLT-01', asset_id: 'PLT-STD', fee_type: FeeType.DAILY_RENTAL, amount_zar: 12.00, effective_from: '2024-01-01', effective_to: null },
   { id: 'FEE-2025-01', asset_id: 'SH-001', fee_type: FeeType.DAILY_RENTAL, amount_zar: 4.85, effective_from: '2025-01-01', effective_to: '2025-06-30' },
   { id: 'FEE-2025-02', asset_id: 'SH-001', fee_type: FeeType.DAILY_RENTAL, amount_zar: 5.15, effective_from: '2025-07-01', effective_to: null },
   { id: 'FEE-2025-03', asset_id: 'SH-P01', fee_type: FeeType.ISSUE_FEE, amount_zar: 145.00, effective_from: '2025-01-01', effective_to: null },
@@ -53,7 +57,7 @@ export const MOCK_FEES: FeeSchedule[] = [
 const generateMockData = () => {
   const batches: Batch[] = [];
   const movements: BatchMovement[] = [];
-  const assetsIds = ['SH-001', 'SH-002', 'SH-003', 'SH-P01', 'SH-P02'];
+  const assetsIds = ['SH-001', 'SH-002', 'SH-003', 'SH-P01', 'SH-P02', 'CRT-STD', 'PLT-STD'];
   const locationsIds = ['LOC-JHB-01', 'LOC-CPT-01', 'LOC-DBN-01', 'LOC-CUST-01', 'LOC-CUST-02', 'LOC-COLD-01', 'LOC-TRANS-01', 'LOC-TRANS-02'];
   
   for (let i = 1; i <= 105; i++) {
