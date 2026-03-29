@@ -897,9 +897,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Fix get_supplier_liability ambiguity (Drop both possible signatures)
-DROP FUNCTION IF EXISTS public.get_supplier_liability(UUID, DATE, DATE);
-DROP FUNCTION IF EXISTS public.get_supplier_liability(TEXT, DATE, DATE);
+-- Fix get_supplier_liability ambiguity (Consolidated Version)
+DROP FUNCTION IF EXISTS public.get_supplier_liability(UUID, DATE, DATE) CASCADE;
+DROP FUNCTION IF EXISTS public.get_supplier_liability(TEXT, DATE, DATE) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.get_supplier_liability(
     p_supplier_id TEXT,
@@ -964,7 +964,7 @@ BEGIN
       AND NOT EXISTS (SELECT 1 FROM public.thaan_slips ts WHERE ts.batch_id = bm.batch_id)
       AND bm.transaction_date BETWEEN p_start_date AND p_end_date;
 
-    -- 4. Claims (Credits)
+    -- 4. Claims (Accepted Credits)
     RETURN QUERY
     SELECT 
         c.batch_id,
@@ -979,6 +979,25 @@ BEGIN
       AND c.status = 'Accepted'
       AND c.is_settled = FALSE
       AND c.created_at::date BETWEEN p_start_date AND p_end_date;
+
+    -- 5. Salvage Credits (10% back for Scrapped items)
+    RETURN QUERY
+    SELECT 
+        al.batch_id,
+        am.name as asset_name,
+        0 as days,
+        -((al.lost_quantity * fs.amount_zar) * 0.10)::NUMERIC as amount_zar,
+        'Salvage Credit'::TEXT as liability_type
+    FROM public.asset_losses al
+    JOIN public.batches b ON al.batch_id = b.id
+    JOIN public.asset_master am ON b.asset_id = am.id
+    JOIN public.fee_schedule fs ON am.id = fs.asset_id
+    WHERE am.supplier_id = p_supplier_id
+      AND al.is_settled = FALSE
+      AND al.loss_type = 'Scrapped'
+      AND fs.fee_type = 'Replacement Fee (Lost Equipment)'
+      AND fs.effective_to IS NULL
+      AND al.transaction_date BETWEEN p_start_date AND p_end_date;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -1055,92 +1074,6 @@ BEGIN
     RETURN v_settlement_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Fix get_supplier_liability ambiguity (Drop both possible signatures and create one)
-DROP FUNCTION IF EXISTS public.get_supplier_liability(UUID, DATE, DATE);
-DROP FUNCTION IF EXISTS public.get_supplier_liability(TEXT, DATE, DATE);
-
-CREATE OR REPLACE FUNCTION public.get_supplier_liability(
-    p_supplier_id TEXT,
-    p_start_date DATE,
-    p_end_date DATE
-)
-RETURNS TABLE (
-    batch_id TEXT,
-    asset_name TEXT,
-    days INTEGER,
-    amount_zar NUMERIC,
-    liability_type TEXT
-) AS $$
-BEGIN
-    -- 1. Rental Accruals (Outstanding)
-    RETURN QUERY
-    SELECT 
-        b.id as batch_id,
-        am.name as asset_name,
-        GREATEST(0, (LEAST(p_end_date, CURRENT_DATE) - b.transaction_date))::INTEGER as days,
-        public.calculate_batch_accrual_in_range(b.id, p_start_date, p_end_date) as amount_zar,
-        'Rental'::TEXT as liability_type
-    FROM public.batches b
-    JOIN public.asset_master am ON b.asset_id = am.id
-    WHERE am.supplier_id = p_supplier_id
-      AND b.is_settled = FALSE
-      AND b.transaction_date <= p_end_date;
-
-    -- 2. Asset Losses (Outstanding)
-    RETURN QUERY
-    SELECT 
-        al.batch_id,
-        am.name as asset_name,
-        0 as days,
-        (al.lost_quantity * fs.amount_zar)::NUMERIC as amount_zar,
-        'Loss'::TEXT as liability_type
-    FROM public.asset_losses al
-    JOIN public.batches b ON al.batch_id = b.id
-    JOIN public.asset_master am ON b.asset_id = am.id
-    JOIN public.fee_schedule fs ON am.id = fs.asset_id
-    WHERE am.supplier_id = p_supplier_id
-      AND al.is_settled = FALSE
-      AND fs.fee_type = 'Replacement Fee (Lost Equipment)'
-      AND fs.effective_to IS NULL
-      AND al.transaction_date BETWEEN p_start_date AND p_end_date;
-
-    -- 3. Penalties (Missing THAAN on Return)
-    RETURN QUERY
-    SELECT 
-        b.id as batch_id,
-        am.name as asset_name,
-        0 as days,
-        150.00::NUMERIC as amount_zar, -- Flat penalty for missing THAAN
-        'Penalty'::TEXT as liability_type
-    FROM public.batches b
-    JOIN public.asset_master am ON b.asset_id = am.id
-    WHERE am.supplier_id = p_supplier_id
-      AND b.is_settled = FALSE
-      AND b.status = 'Returned'
-      AND b.return_reference IS NULL
-      AND b.transaction_date BETWEEN p_start_date AND p_end_date;
-
-    -- 4. Credits (Salvage/Offsets)
-    RETURN QUERY
-    SELECT 
-        al.batch_id,
-        am.name as asset_name,
-        0 as days,
-        -((al.lost_quantity * fs.amount_zar) * 0.10)::NUMERIC as amount_zar, -- 10% Salvage Credit
-        'Credit'::TEXT as liability_type
-    FROM public.asset_losses al
-    JOIN public.batches b ON al.batch_id = b.id
-    JOIN public.asset_master am ON b.asset_id = am.id
-    JOIN public.fee_schedule fs ON am.id = fs.asset_id
-    WHERE am.supplier_id = p_supplier_id
-      AND al.is_settled = FALSE
-      AND al.loss_type = 'Scrapped'
-      AND fs.fee_type = 'Replacement Fee (Lost Equipment)'
-      AND fs.effective_to IS NULL
-      AND al.transaction_date BETWEEN p_start_date AND p_end_date;
-END;
-$$ LANGUAGE plpgsql;
 
 -- Refresh schema cache
 NOTIFY pgrst, 'reload schema';
