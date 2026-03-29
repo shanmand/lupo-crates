@@ -22,6 +22,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
   const [paymentRef, setPaymentRef] = useState<string>('');
   
   const [isLoading, setIsLoading] = useState(true);
+  const [isCalculating, setIsCalculating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
@@ -59,67 +60,38 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
         return;
       }
       
-      // Fetch data needed for calculation
-      const [batchesRes, sourcesData, feesRes] = await Promise.all([
-        supabase.from('batches').select('*').eq('is_settled', false),
-        fetchAllSources(),
-        supabase.from('fee_schedule').select('*').eq('is_active', true)
-      ]);
-
-      if (batchesRes.error) throw batchesRes.error;
-      
-      const batchesData = batchesRes.data || [];
-      const feesData = feesRes.data || [];
-
-      // Filter and map batches client-side
-      const filtered = batchesData
-        .filter(b => {
-          // Find asset to check supplier
-          const asset = assets.find(a => a.id === b.asset_id);
-          if (asset?.supplier_id !== selectedSupplier) return false;
-
-          // Date filtering
-          const transDate = b.transaction_date || b.created_at.split('T')[0];
-          if (startDate && transDate < startDate) return false;
-          if (endDate && transDate > endDate) return false;
-
-          return true;
-        })
-        .map(b => {
-          // Calculate liability
-          const assetFee = feesData.find(f => f.asset_id === b.asset_id && f.fee_type.startsWith('Daily Rental'));
-          const dailyRentalFee = assetFee?.amount_zar || 0;
-          
-          const start = new Date(b.transaction_date || b.created_at);
-          const end = new Date(endDate); // Calculate up to the selected end date
-          const diffTime = Math.max(0, end.getTime() - start.getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          const accruedLiability = diffDays * dailyRentalFee * b.quantity;
-
-          return {
-            id: b.id,
-            asset_id: b.asset_id,
-            quantity: b.quantity,
-            transaction_date: b.transaction_date || b.created_at.split('T')[0],
-            daily_rental_fee: dailyRentalFee,
-            daily_accrued_liability: accruedLiability,
-            created_at: b.created_at
-          };
+      setIsCalculating(true);
+      try {
+        const { data, error } = await supabase.rpc('get_supplier_liability', {
+          p_supplier_id: selectedSupplier,
+          p_start_date: startDate,
+          p_end_date: endDate
         });
 
-      setBatches(filtered as any);
+        if (error) throw error;
+        
+        // Map RPC result to match the expected structure in the table
+        const mappedBatches = (data || []).map((r: any) => ({
+          id: r.batch_id,
+          asset_name: r.asset_name,
+          days: r.days,
+          amount_zar: r.amount_zar,
+          liability_type: r.liability_type
+        }));
+
+        setBatches(mappedBatches);
+      } catch (err: any) {
+        setNotification({ message: err.message || "Failed to fetch liabilities", type: 'error' });
+      } finally {
+        setIsCalculating(false);
+      }
     };
     fetchBatches();
-  }, [selectedSupplier, startDate, endDate, assets]);
-
-  const calculateLiability = (batch: any) => {
-    // Use the accrued liability from the view
-    return batch.daily_accrued_liability || 0;
-  };
+  }, [selectedSupplier, startDate, endDate]);
 
   const totalGrossLiability = useMemo(() => {
-    return batches.reduce((acc, b) => acc + calculateLiability(b), 0);
-  }, [batches, endDate]);
+    return batches.reduce((acc, b: any) => acc + Number(b.amount_zar), 0);
+  }, [batches]);
 
   const netPayable = Math.max(0, totalGrossLiability - discount);
 
@@ -128,32 +100,19 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
     
     setIsSubmitting(true);
     try {
-      // 1. Create Settlement Record
-      const { data: settlement, error: settleError } = await supabase
-        .from('settlements')
-        .insert([{
-          supplier_id: selectedSupplier,
-          start_date: startDate,
-          end_date: endDate,
-          gross_liability: totalGrossLiability,
-          discount_amount: discount,
-          net_payable: netPayable,
-          settled_by: currentUser.id && currentUser.id !== 'dev' ? currentUser.id : null,
-          settled_by_name: currentUser.email || 'System'
-        }])
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc('finalize_payment_settlement', {
+        p_supplier_id: selectedSupplier,
+        p_start_date: startDate,
+        p_end_date: endDate,
+        p_gross_liability: totalGrossLiability,
+        p_discount_amount: discount,
+        p_net_payable: netPayable,
+        p_cash_paid: netPayable, // Assuming full payment for now in this module
+        p_payment_ref: paymentRef,
+        p_settled_by: currentUser.id && currentUser.id !== 'dev' ? currentUser.id : (currentUser.email || 'System')
+      });
 
-      if (settleError) throw settleError;
-
-      // 2. Mark Batches as Settled
-      const batchIds = batches.map(b => b.id);
-      const { error: updateError } = await supabase
-        .from('batches')
-        .update({ is_settled: true, settled_at: new Date().toISOString() })
-        .in('id', batchIds);
-      
-      if (updateError) throw updateError;
+      if (error) throw error;
 
       setNotification({ message: "Settlement processed successfully.", type: 'success' });
       
@@ -164,8 +123,8 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
       setBatches([]);
       
       // Refresh settlements list
-      const { data } = await supabase.from('settlements').select('*').order('created_at', { ascending: false });
-      if (data) setSettlements(data);
+      const { data: settlementsData } = await supabase.from('settlements').select('*').order('created_at', { ascending: false });
+      if (settlementsData) setSettlements(settlementsData);
 
     } catch (err: any) {
       setNotification({ message: err.message || "Failed to process settlement.", type: 'error' });
@@ -177,7 +136,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
 
   const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  if (isLoading) {
+  if (isLoading && !selectedSupplier) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
         <Loader2 className="animate-spin text-slate-900" size={32} />
@@ -249,36 +208,48 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
                 </div>
               </div>
 
-              {selectedSupplier && batches.length > 0 ? (
+              {selectedSupplier && (batches.length > 0 || isCalculating) ? (
                 <div className="space-y-6 animate-in fade-in duration-300">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="border-b border-slate-100">
-                          <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</th>
-                          <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset</th>
-                          <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Qty</th>
-                          <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Arrival</th>
-                          <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Liability</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {batches.map(batch => {
-                          const asset = assets.find(a => a.id === batch.asset_id);
-                          const liability = calculateLiability(batch);
-                          return (
+                  {isCalculating ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-4">
+                      <Loader2 className="animate-spin text-amber-500" size={48} />
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Calculating Liabilities...</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-slate-100">
+                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Days</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Liability</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {batches.map((batch: any) => (
                             <tr key={batch.id} className="hover:bg-slate-50/50 transition-colors">
                               <td className="py-4 text-xs font-bold text-slate-900">#{batch.id}</td>
-                              <td className="py-4 text-xs text-slate-600">{asset?.name}</td>
-                              <td className="py-4 text-xs font-black text-slate-900">{batch.quantity}</td>
-                              <td className="py-4 text-xs text-slate-500">{batch.transaction_date || batch.created_at.split('T')[0]}</td>
-                              <td className="py-4 text-xs font-black text-slate-900 text-right">R {formatCurrency(liability)}</td>
+                              <td className="py-4 text-xs text-slate-600">{batch.asset_name}</td>
+                              <td className="py-4 text-xs font-black text-slate-900">{batch.days || '-'}</td>
+                              <td className="py-4">
+                                <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
+                                  batch.liability_type === 'Rental' ? 'bg-blue-100 text-blue-700' :
+                                  batch.liability_type === 'Loss' ? 'bg-amber-100 text-amber-700' :
+                                  batch.liability_type === 'Penalty' ? 'bg-rose-100 text-rose-700' :
+                                  'bg-emerald-100 text-emerald-700'
+                                }`}>
+                                  {batch.liability_type}
+                                </span>
+                              </td>
+                              <td className="py-4 text-xs font-black text-slate-900 text-right">R {formatCurrency(Number(batch.amount_zar))}</td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
                   <div className="p-8 bg-slate-900 rounded-3xl text-white space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -315,7 +286,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
                       <div className="flex items-end">
                         <button 
                           onClick={handleSettle}
-                          disabled={isSubmitting || !paymentRef}
+                          disabled={isSubmitting || !paymentRef || batches.length === 0}
                           className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-black py-4 rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                         >
                           {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <DollarSign size={18} />}

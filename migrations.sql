@@ -819,13 +819,13 @@ ALTER TABLE public.claims ADD COLUMN IF NOT EXISTS is_settled BOOLEAN DEFAULT FA
 -- Create settlements table
 CREATE TABLE IF NOT EXISTS public.settlements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    supplier_id TEXT REFERENCES public.business_parties(id),
+    supplier_id TEXT, -- Standardized to TEXT
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     gross_liability NUMERIC NOT NULL,
     discount_amount NUMERIC DEFAULT 0,
     net_payable NUMERIC NOT NULL,
-    cash_paid NUMERIC NOT NULL,
+    cash_paid NUMERIC DEFAULT 0,
     payment_ref TEXT,
     settled_by UUID,
     settled_by_name TEXT,
@@ -916,17 +916,24 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     -- 1. Rental Accruals (Outstanding)
+    -- Logic: (p_end_date - batch_arrival_date) * daily_fee_amount * quantity
     RETURN QUERY
     SELECT 
         b.id as batch_id,
         am.name as asset_name,
-        GREATEST(0, (LEAST(p_end_date, CURRENT_DATE) - b.transaction_date))::INTEGER as days,
-        public.calculate_batch_accrual_in_range(b.id, p_start_date, p_end_date) as amount_zar,
+        GREATEST(0, (p_end_date - b.transaction_date))::INTEGER as days,
+        COALESCE(
+            (GREATEST(0, (p_end_date - b.transaction_date))::NUMERIC * fs.amount_zar * b.quantity),
+            0
+        )::NUMERIC as amount_zar,
         'Rental'::TEXT as liability_type
     FROM public.batches b
     JOIN public.asset_master am ON b.asset_id = am.id
-    WHERE am.supplier_id = p_supplier_id
+    JOIN public.fee_schedule fs ON am.id = fs.asset_id
+    WHERE am.supplier_id::text = p_supplier_id
       AND b.is_settled = FALSE
+      AND fs.fee_type ILIKE '%Daily Rental%'
+      AND fs.effective_to IS NULL
       AND b.transaction_date <= p_end_date;
 
     -- 2. Asset Losses (Outstanding)
@@ -935,17 +942,17 @@ BEGIN
         al.batch_id,
         am.name as asset_name,
         0 as days,
-        (al.lost_quantity * fs.amount_zar)::NUMERIC as amount_zar,
+        COALESCE((al.lost_quantity * fs.amount_zar), 0)::NUMERIC as amount_zar,
         'Loss'::TEXT as liability_type
     FROM public.asset_losses al
     JOIN public.batches b ON al.batch_id = b.id
     JOIN public.asset_master am ON b.asset_id = am.id
     JOIN public.fee_schedule fs ON am.id = fs.asset_id
-    WHERE am.supplier_id = p_supplier_id
+    WHERE am.supplier_id::text = p_supplier_id
       AND al.is_settled = FALSE
-      AND fs.fee_type = 'Replacement Fee (Lost Equipment)'
+      AND fs.fee_type ILIKE '%Replacement Fee%'
       AND fs.effective_to IS NULL
-      AND al.transaction_date BETWEEN p_start_date AND p_end_date;
+      AND al.transaction_date <= p_end_date;
 
     -- 3. Penalties (Missing THAAN on Return)
     RETURN QUERY
@@ -959,11 +966,11 @@ BEGIN
     JOIN public.batches b ON bm.batch_id = b.id
     JOIN public.asset_master am ON b.asset_id = am.id
     JOIN public.locations l ON bm.to_location_id = l.id
-    WHERE am.supplier_id = p_supplier_id
+    WHERE am.supplier_id::text = p_supplier_id
       AND l.type = 'Returning to Supplier'
       AND b.is_settled = FALSE
       AND NOT EXISTS (SELECT 1 FROM public.thaan_slips ts WHERE ts.batch_id = bm.batch_id)
-      AND bm.transaction_date BETWEEN p_start_date AND p_end_date;
+      AND bm.transaction_date <= p_end_date;
 
     -- 4. Claims (Accepted Credits)
     RETURN QUERY
@@ -971,36 +978,19 @@ BEGIN
         c.batch_id,
         am.name as asset_name,
         0 as days,
-        (-c.amount_claimed_zar)::NUMERIC as amount_zar,
+        (-COALESCE(c.amount_claimed_zar, 0))::NUMERIC as amount_zar,
         'Credit'::TEXT as liability_type
     FROM public.claims c
     JOIN public.batches b ON c.batch_id = b.id
     JOIN public.asset_master am ON b.asset_id = am.id
-    WHERE am.supplier_id = p_supplier_id
+    WHERE am.supplier_id::text = p_supplier_id
       AND c.status = 'Accepted'
       AND c.is_settled = FALSE
-      AND c.created_at::date BETWEEN p_start_date AND p_end_date;
-
-    -- 5. Salvage Credits (10% back for Scrapped items)
-    RETURN QUERY
-    SELECT 
-        al.batch_id,
-        am.name as asset_name,
-        0 as days,
-        -((al.lost_quantity * fs.amount_zar) * 0.10)::NUMERIC as amount_zar,
-        'Salvage Credit'::TEXT as liability_type
-    FROM public.asset_losses al
-    JOIN public.batches b ON al.batch_id = b.id
-    JOIN public.asset_master am ON b.asset_id = am.id
-    JOIN public.fee_schedule fs ON am.id = fs.asset_id
-    WHERE am.supplier_id = p_supplier_id
-      AND al.is_settled = FALSE
-      AND al.loss_type = 'Scrapped'
-      AND fs.fee_type = 'Replacement Fee (Lost Equipment)'
-      AND fs.effective_to IS NULL
-      AND al.transaction_date BETWEEN p_start_date AND p_end_date;
+      AND c.created_at::date <= p_end_date;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.get_supplier_liability(TEXT, DATE, DATE) TO authenticated, service_role;
 
 -- Finalize Settlement RPC
 CREATE OR REPLACE FUNCTION public.finalize_payment_settlement(
@@ -1019,7 +1009,7 @@ DECLARE
     v_settlement_id UUID;
     v_settled_by_uuid UUID;
 BEGIN
-    -- Attempt to cast p_settled_by to UUID if possible, otherwise use NULL or a system ID
+    -- Attempt to cast p_settled_by to UUID if possible, otherwise use NULL
     BEGIN
         v_settled_by_uuid := p_settled_by::UUID;
     EXCEPTION WHEN OTHERS THEN
@@ -1057,7 +1047,7 @@ BEGIN
         settled_at = NOW()
     FROM public.asset_master am
     WHERE b.asset_id = am.id
-      AND am.supplier_id = p_supplier_id
+      AND am.supplier_id::text = p_supplier_id
       AND b.is_settled = FALSE
       AND b.transaction_date <= p_end_date;
 
@@ -1067,7 +1057,7 @@ BEGIN
     FROM public.batches b
     JOIN public.asset_master am ON b.asset_id = am.id
     WHERE al.batch_id = b.id
-      AND am.supplier_id = p_supplier_id
+      AND am.supplier_id::text = p_supplier_id
       AND al.is_settled = FALSE
       AND al.transaction_date <= p_end_date;
 
@@ -1077,7 +1067,7 @@ BEGIN
     FROM public.batches b
     JOIN public.asset_master am ON b.asset_id = am.id
     WHERE c.batch_id = b.id
-      AND am.supplier_id = p_supplier_id
+      AND am.supplier_id::text = p_supplier_id
       AND c.status = 'Accepted'
       AND c.is_settled = FALSE
       AND c.created_at::date <= p_end_date;
@@ -1085,6 +1075,8 @@ BEGIN
     RETURN v_settlement_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.finalize_payment_settlement(TEXT, DATE, DATE, NUMERIC, NUMERIC, NUMERIC, NUMERIC, TEXT, TEXT) TO authenticated, service_role;
 
 -- Refresh schema cache
 NOTIFY pgrst, 'reload schema';
