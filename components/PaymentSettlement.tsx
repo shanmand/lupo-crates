@@ -21,8 +21,6 @@ interface PaymentSettlementProps {
   currentUser?: User;
 }
 
-const isValidUuid = (uuid: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
-
 interface LiabilityRecord {
   batch_id: string;
   asset_name: string;
@@ -67,11 +65,6 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
   const calculateLiability = async () => {
     if (!selectedSupplier) return;
     
-    if (!isValidUuid(selectedSupplier)) {
-      alert('Please select a valid supplier');
-      return;
-    }
-
     if (!isSupabaseConfigured) return;
     setIsCalculating(true);
     try {
