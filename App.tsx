@@ -143,20 +143,20 @@ const AppContent: React.FC = () => {
   const renderContent = () => {
     // Explicit module rendering
     switch (activeTab) {
-      case NavItem.DASHBOARD: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} onSchemaFix={() => setActiveTab(NavItem.SCHEMA)} />;
+      case NavItem.DASHBOARD: return <DashboardView currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} branchContext={currentBranchContext as any} onDrillDown={() => setActiveTab(NavItem.REPORTS)} onSchemaFix={() => setActiveTab(NavItem.SCHEMA)} />;
       case NavItem.EXECUTIVE_REPORT: return <ExecutiveReport onNavigate={(tab) => setActiveTab(tab as NavItem)} />;
-      case NavItem.INVENTORY: return <InventoryDashboard currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
+      case NavItem.INVENTORY: return <InventoryDashboard currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} />;
       case NavItem.INVENTORY_MAP: return <InventoryMap />;
       case NavItem.FINANCIALS: return <FinancialReport branchContext={currentBranchContext as any} />;
       case NavItem.SETTLEMENT: return <SupplierSettlementReport isAdmin={profile?.role_name === UserRole.ADMIN} />;
       case NavItem.SUPPLIER_RECON: return <SupplierRecon />;
-      case NavItem.PAYMENT_SETTLEMENT: return <PaymentSettlement currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
-      case NavItem.ASSETS: return <AssetList currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} isAdmin={profile?.role_name === UserRole.ADMIN} />;
+      case NavItem.PAYMENT_SETTLEMENT: return <PaymentSettlement currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} />;
+      case NavItem.ASSETS: return <AssetList currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} isAdmin={profile?.role_name === UserRole.ADMIN} />;
       case NavItem.TRACKER: return <BatchTracker selectedBranchId={dbBranches.find(b => b.name === currentBranchContext)?.id} />;
-      case NavItem.LOGISTICS: return <LogisticsOps currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} initialCollectionRequest={pendingAssignment || undefined} onNavigate={(tab) => setActiveTab(tab as NavItem)} />;
+      case NavItem.LOGISTICS: return <LogisticsOps currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} initialCollectionRequest={pendingAssignment || undefined} onNavigate={(tab) => setActiveTab(tab as NavItem)} />;
       case NavItem.COLLECTION_REQUESTS: return (
         <CollectionRequests 
-          currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} 
+          currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} 
           onAssign={(req) => {
             setPendingAssignment({
               customerId: req.customer_id,
@@ -168,7 +168,7 @@ const AppContent: React.FC = () => {
           }}
         />
       );
-      case NavItem.LOSSES: return <LossRecorder currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
+      case NavItem.LOSSES: return <LossRecorder currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} />;
       case NavItem.CLAIMS: return <ClaimsManager isManager={profile?.role_name === UserRole.MANAGER || profile?.role_name === UserRole.ADMIN} />;
       case NavItem.SCHEMA: return <SchemaView />;
       case NavItem.USERS: return <UserManagement />;
@@ -179,8 +179,8 @@ const AppContent: React.FC = () => {
       case NavItem.BATCH_MANAGEMENT: return <BatchManagement />;
       case NavItem.REPORTS: return <ReportsView />;
       case NavItem.TASKS: return <TaskManagement onStartStockTake={(locId) => { setPreselectedStockTakeLocation(locId); setActiveTab(NavItem.STOCK_TAKE); }} />;
-      case NavItem.STOCK_TAKE: return <StockTakeModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} initialLocationId={preselectedStockTakeLocation} />;
-      case NavItem.FINANCE_SETTLEMENT: return <SettlementModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands'}} />;
+      case NavItem.STOCK_TAKE: return <StockTakeModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} initialLocationId={preselectedStockTakeLocation} />;
+      case NavItem.FINANCE_SETTLEMENT: return <SettlementModule currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} />;
       case NavItem.LIABILITY_HEATMAP: return <LiabilityHeatmap />;
       case NavItem.PERSONNEL: return <PersonnelManagement />;
       case NavItem.SHIFTS: return <ShiftManagement />;

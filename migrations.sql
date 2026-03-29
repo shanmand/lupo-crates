@@ -828,6 +828,7 @@ CREATE TABLE IF NOT EXISTS public.settlements (
     cash_paid NUMERIC NOT NULL,
     payment_ref TEXT,
     settled_by UUID,
+    settled_by_name TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -1011,12 +1012,20 @@ CREATE OR REPLACE FUNCTION public.finalize_payment_settlement(
     p_net_payable NUMERIC,
     p_cash_paid NUMERIC,
     p_payment_ref TEXT,
-    p_settled_by UUID
+    p_settled_by TEXT
 )
 RETURNS UUID AS $$
 DECLARE
     v_settlement_id UUID;
+    v_settled_by_uuid UUID;
 BEGIN
+    -- Attempt to cast p_settled_by to UUID if possible, otherwise use NULL or a system ID
+    BEGIN
+        v_settled_by_uuid := p_settled_by::UUID;
+    EXCEPTION WHEN OTHERS THEN
+        v_settled_by_uuid := NULL;
+    END;
+
     -- 1. Create settlement record
     INSERT INTO public.settlements (
         supplier_id,
@@ -1027,7 +1036,8 @@ BEGIN
         net_payable,
         cash_paid,
         payment_ref,
-        settled_by
+        settled_by,
+        settled_by_name
     ) VALUES (
         p_supplier_id,
         p_start_date,
@@ -1037,6 +1047,7 @@ BEGIN
         p_net_payable,
         p_cash_paid,
         p_payment_ref,
+        v_settled_by_uuid,
         p_settled_by
     ) RETURNING id INTO v_settlement_id;
 

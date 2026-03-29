@@ -37,6 +37,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [records, setRecords] = useState<LiabilityRecord[]>([]);
+  const [hasCalculated, setHasCalculated] = useState(false);
 
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [cashPaid, setCashPaid] = useState<number>(0);
@@ -77,6 +78,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
 
       if (error) throw error;
       setRecords(data || []);
+      setHasCalculated(true);
       
       const gross = (data || []).reduce((acc: number, r: LiabilityRecord) => acc + Number(r.amount_zar), 0);
       setCashPaid(gross);
@@ -104,7 +106,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
         p_net_payable: netPayable,
         p_cash_paid: cashPaid,
         p_payment_ref: paymentRef,
-        p_settled_by: currentUser?.email || 'System'
+        p_settled_by: currentUser?.id && currentUser.id !== 'dev' ? currentUser.id : (currentUser?.email || 'System')
       });
 
       if (error) throw error;
@@ -194,7 +196,11 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
                 <select 
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                   value={selectedSupplier}
-                  onChange={e => setSelectedSupplier(e.target.value)}
+                  onChange={e => {
+                    setSelectedSupplier(e.target.value);
+                    setHasCalculated(false);
+                    setRecords([]);
+                  }}
                 >
                   <option value="">Select Supplier...</option>
                   {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -229,7 +235,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
             </button>
           </div>
 
-          {records.length > 0 && (
+          {hasCalculated && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
               {/* Liability Detailed Table */}
               <div className="lg:col-span-2 space-y-6">
@@ -239,53 +245,50 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{records.length} Records Found</span>
                   </div>
                   <div className="overflow-x-auto">
-                    {!selectedSupplier ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                        <Calculator size={48} className="mb-4 opacity-20" />
-                        <p className="text-sm font-bold uppercase tracking-widest">Select a supplier to calculate liability</p>
-                      </div>
-                    ) : (
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50/50">
-                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</th>
-                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset</th>
-                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Days</th>
-                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
-                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total ZAR</th>
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/50">
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Days</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total ZAR</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {records.map((r, i) => (
+                          <tr key={i} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4 text-xs font-bold text-slate-900">{r.batch_id}</td>
+                            <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.asset_name}</td>
+                            <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.days > 0 ? r.days : '-'}</td>
+                            <td className="px-6 py-4">
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
+                                r.liability_type === 'Rental' ? 'bg-blue-100 text-blue-700' :
+                                r.liability_type === 'Loss' ? 'bg-amber-100 text-amber-700' :
+                                r.liability_type === 'Penalty' ? 'bg-rose-100 text-rose-700' :
+                                'bg-emerald-100 text-emerald-700'
+                              }`}>
+                                {r.liability_type}
+                              </span>
+                            </td>
+                            <td className={`px-6 py-4 text-xs font-black text-right ${Number(r.amount_zar) < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                              R {formatCurrency(Number(r.amount_zar))}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {records.map((r, i) => (
-                            <tr key={i} className="hover:bg-slate-50 transition-colors">
-                              <td className="px-6 py-4 text-xs font-bold text-slate-900">{r.batch_id}</td>
-                              <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.asset_name}</td>
-                              <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.days > 0 ? r.days : '-'}</td>
-                              <td className="px-6 py-4">
-                                <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
-                                  r.liability_type === 'Rental' ? 'bg-blue-100 text-blue-700' :
-                                  r.liability_type === 'Loss' ? 'bg-amber-100 text-amber-700' :
-                                  r.liability_type === 'Penalty' ? 'bg-rose-100 text-rose-700' :
-                                  'bg-emerald-100 text-emerald-700'
-                                }`}>
-                                  {r.liability_type}
-                                </span>
-                              </td>
-                              <td className={`px-6 py-4 text-xs font-black text-right ${Number(r.amount_zar) < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                R {formatCurrency(Number(r.amount_zar))}
-                              </td>
-                            </tr>
-                          ))}
-                          {records.length === 0 && !isCalculating && (
-                            <tr>
-                              <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
-                                No outstanding liability found for this period.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    )}
+                        ))}
+                        {records.length === 0 && !isCalculating && (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-20 text-center">
+                              <div className="flex flex-col items-center justify-center text-slate-400">
+                                <CheckCircle2 size={48} className="mb-4 opacity-20 text-emerald-500" />
+                                <p className="text-sm font-bold uppercase tracking-widest">No outstanding liability found</p>
+                                <p className="text-[10px] font-medium mt-1">Everything is settled for this supplier in the selected period.</p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 

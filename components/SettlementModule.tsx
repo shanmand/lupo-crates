@@ -138,7 +138,8 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
           gross_liability: totalGrossLiability,
           discount_amount: discount,
           net_payable: netPayable,
-          settled_by: currentUser.id
+          settled_by: currentUser.id && currentUser.id !== 'dev' ? currentUser.id : null,
+          settled_by_name: currentUser.email || 'System'
         }])
         .select()
         .single();
