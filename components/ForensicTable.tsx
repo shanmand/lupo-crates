@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Search, Loader2, Package, Truck, User as UserIcon, MapPin, Calendar, ArrowLeft, ArrowRight } from 'lucide-react';
 
 const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: string) => void }> = ({ selectedBranchId, onSelectBatch }) => {
@@ -24,16 +24,14 @@ const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: 
       console.log('Fetching Forensic Data with filters:', { selectedBranchId, startDate, endDate, page, searchQuery });
       
       // Fetch base data
-      const [movementsRes, sourcesRes] = await Promise.all([
+      const [movementsRes, sources] = await Promise.all([
         supabase.from('batch_movements').select('*'),
-        supabase.from('vw_all_sources').select('*')
+        fetchAllSources()
       ]);
 
       if (movementsRes.error) throw movementsRes.error;
-      if (sourcesRes.error) throw sourcesRes.error;
 
       const movements = movementsRes.data || [];
-      const sources = sourcesRes.data || [];
 
       // Join and filter client-side
       let joinedData = movements.map(m => {

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ClipboardCheck, AlertTriangle, Search, MapPin, Package, History, TrendingDown, Loader2, CheckCircle2, Plus, Calendar, ArrowRight, X } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { User, Location, AssetMaster } from '../types';
 
 interface StockTakeModuleProps {
@@ -31,18 +31,18 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser }) => {
     }
     setIsLoading(true);
     try {
-      const [sourceRes, takesRes, itemsRes] = await Promise.all([
-        supabase.from('vw_all_sources').select('*'),
+      const [sources, takesRes, itemsRes] = await Promise.all([
+        fetchAllSources(),
         supabase.from('stock_takes').select('*').order('take_date', { ascending: false }),
         supabase.from('stock_take_items').select('*')
       ]);
 
-      if (sourceRes.data) setSources(sourceRes.data);
+      if (sources) setSources(sources);
       
-      if (takesRes.data && itemsRes.data && sourceRes.data) {
+      if (takesRes.data && itemsRes.data && sources) {
         const takes = takesRes.data;
         const items = itemsRes.data;
-        const locations = sourceRes.data;
+        const locations = sources;
 
         // Aggregate data (replicating vw_stock_take_history)
         const aggregatedHistory = takes.map(st => {

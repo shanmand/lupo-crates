@@ -15,8 +15,8 @@ import {
   ShieldCheck,
   Zap
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
-import { Batch, AssetMaster, FeeSchedule, Location, Branch, User } from '../types';
+import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
+import { Batch, AssetMaster, FeeSchedule, Location, Branch, User, AllSource } from '../types';
 
 interface BatchFinancialDetailCardProps {
   batchId: string;
@@ -24,7 +24,7 @@ interface BatchFinancialDetailCardProps {
 }
 
 const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ batchId, onUpdate }) => {
-  const [batch, setBatch] = useState<(Batch & { asset: AssetMaster, location: Location & { branch: Branch } }) | null>(null);
+  const [batch, setBatch] = useState<(Batch & { asset?: AssetMaster, location?: AllSource }) | null>(null);
   const [accrual, setAccrual] = useState<number>(0);
   const [dailyRate, setDailyRate] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,24 +43,32 @@ const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ bat
     else setIsRefreshing(true);
 
     try {
-      // 1. Fetch Batch with Joins
+      // 1. Fetch Batch
       const { data: batchData, error: batchError } = await supabase
         .from('batches')
-        .select(`
-          *,
-          asset:asset_master(*),
-          location:locations(
-            *,
-            branch:branches(*)
-          )
-        `)
+        .select('*')
         .eq('id', batchId)
         .single();
 
       if (batchError) throw batchError;
-      setBatch(batchData as any);
 
-      // 2. Fetch Accrual via RPC
+      // 2. Fetch Asset and Sources
+      const [assetRes, sources, branchesRes] = await Promise.all([
+        supabase.from('asset_master').select('*').eq('id', batchData.asset_id).single(),
+        fetchAllSources(),
+        supabase.from('branches').select('*')
+      ]);
+
+      const source = sources.find(s => s.id === batchData.current_location_id);
+      const branch = branchesRes.data?.find(b => b.id === source?.branch_id);
+
+      setBatch({
+        ...batchData,
+        asset: assetRes.data || undefined,
+        location: source ? { ...source, branch_name: branch?.name } : undefined
+      } as any);
+
+      // 3. Fetch Accrual via RPC
       const { data: accrualData, error: accrualError } = await supabase.rpc('calculate_batch_accrual', {
         batch_id_input: batchId
       });
@@ -218,7 +226,7 @@ const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ bat
               <Building2 size={14} />
               <span className="text-xs font-bold uppercase tracking-widest">Custodian Branch</span>
             </div>
-            <p className="text-sm font-black text-slate-900 uppercase">{batch.location?.branch?.name || 'Unknown Branch'}</p>
+            <p className="text-sm font-black text-slate-900 uppercase">{batch.location?.branch_name || 'Unknown Branch'}</p>
           </div>
         </div>
 
