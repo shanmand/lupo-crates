@@ -449,11 +449,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                     onChange={e => setOrigin(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {origins.filter(o => o.partner_type === 'Internal' && o.type !== LocationType.IN_TRANSIT).map(o => <option key={`origin-home-${o.id}`} value={o.id}>{o.display_name}</option>)}
+                      {origins.filter(o => (o.partner_type === 'Internal' || o.category === 'Home') && o.type !== LocationType.IN_TRANSIT).map(o => <option key={`origin-home-${o.id}`} value={o.id}>{o.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Customers & Partners">
                       {!isInternal && origins
-                        .filter(o => o.category !== 'Home' && o.type !== LocationType.IN_TRANSIT)
+                        .filter(o => o.partner_type !== 'Internal' && o.category !== 'Home' && o.type !== LocationType.IN_TRANSIT)
                         .map(o => <option key={`origin-partner-${o.id}`} value={o.id}>{o.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Trucks (In-Transit)">
@@ -472,11 +472,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                     onChange={e => setDestination(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {destinations.filter(d => d.partner_type === 'Internal' && d.type !== LocationType.IN_TRANSIT).map(d => <option key={`dest-home-${d.id}`} value={d.id}>{d.display_name}</option>)}
+                      {destinations.filter(d => (d.partner_type === 'Internal' || d.category === 'Home') && d.type !== LocationType.IN_TRANSIT).map(d => <option key={`dest-home-${d.id}`} value={d.id}>{d.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Customers & Partners">
                       {!isInternal && destinations
-                        .filter(d => d.category !== 'Home' && d.type !== LocationType.IN_TRANSIT)
+                        .filter(d => d.partner_type !== 'Internal' && d.category !== 'Home' && d.type !== LocationType.IN_TRANSIT)
                         .map(d => <option key={`dest-partner-${d.id}`} value={d.id}>{d.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Trucks (In-Transit)">

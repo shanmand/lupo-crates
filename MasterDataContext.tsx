@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { supabase } from './supabase';
-import { Location, Truck, Driver, AssetMaster, Batch, BusinessParty, Trip } from './types';
+import { Location, Truck, Driver, AssetMaster, Batch, BusinessParty, Trip, LocationType } from './types';
 
 interface MasterDataContextType {
   locations: Location[];
@@ -154,7 +154,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
       category: l.category,
       address: l.address,
       display_name: `${l.name} (${l.partner_type})`,
-      sort_group: l.partner_type === 'Internal' && l.type !== 'In Transit' ? 1 : (l.type === 'In Transit' ? 3 : 2),
+      sort_group: (l.partner_type === 'Internal' || l.category === 'Home') && l.type !== LocationType.IN_TRANSIT ? 1 : (l.type === LocationType.IN_TRANSIT ? 3 : 2),
       source_table: 'Location'
     }));
 
