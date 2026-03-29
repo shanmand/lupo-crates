@@ -283,7 +283,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
             const { error: claimError } = await supabase
               .from('claims')
               .insert([{
-                id: `CLM-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+                id: `CLM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
                 batch_id: targetBatchId,
                 truck_id: truckId,
                 driver_id: driverId,

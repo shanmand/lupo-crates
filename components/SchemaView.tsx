@@ -558,7 +558,12 @@ DECLARE
 BEGIN
     SELECT asset_id, status, quantity INTO v_asset_id, v_status, v_orig_qty FROM public.batches WHERE id = original_batch_id;
     IF v_orig_qty < move_qty THEN RAISE EXCEPTION 'Insufficient quantity in original batch'; END IF;
-    v_new_batch_id := original_batch_id || '-S' || floor(random() * 1000)::text;
+    
+    LOOP
+        v_new_batch_id := original_batch_id || '-S' || floor(random() * 1000000)::text;
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM public.batches WHERE id = v_new_batch_id);
+    END LOOP;
+
     UPDATE public.batches SET quantity = quantity - move_qty WHERE id = original_batch_id;
     INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date)
     VALUES (v_new_batch_id, v_asset_id, move_qty, new_location_id, v_status, move_date);

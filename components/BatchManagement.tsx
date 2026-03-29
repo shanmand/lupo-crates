@@ -78,7 +78,7 @@ const BatchManagement: React.FC = () => {
     setIsLoading(true);
     try {
       if (isSupabaseConfigured) {
-        const batchId = newBatch.id.trim() || `B-${Math.floor(1000 + Math.random() * 9000)}`;
+        const batchId = newBatch.id.trim() || `B-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
         
         // Ensure we only pass string IDs
         const payload = normalizePayload({

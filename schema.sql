@@ -429,7 +429,10 @@ BEGIN
     WHERE id = original_batch_id;
 
     -- 2. Create new batch for the moved portion
-    v_new_batch_id := original_batch_id || '-S' || floor(random() * 1000)::text;
+    LOOP
+        v_new_batch_id := original_batch_id || '-S' || floor(random() * 1000000)::text;
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM public.batches WHERE id = v_new_batch_id);
+    END LOOP;
     
     INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date)
     VALUES (v_new_batch_id, v_asset_id, move_qty, new_location_id, 'Success', move_date);
@@ -478,7 +481,10 @@ BEGIN
         v_user_uuid := NULL;
     END;
 
-    v_batch_id := 'BAT-' || to_char(now(), 'YYYYMMDD') || '-' || floor(random() * 10000)::text;
+    LOOP
+        v_batch_id := 'BAT-' || to_char(now(), 'YYYYMMDD') || '-' || floor(random() * 1000000)::text;
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM public.batches WHERE id = v_batch_id);
+    END LOOP;
     
     INSERT INTO public.batches (id, asset_id, quantity, current_location_id, status, transaction_date)
     VALUES (v_batch_id, p_asset_id, p_quantity, p_location_id, 'Success', CURRENT_DATE);
@@ -678,7 +684,10 @@ BEGIN
         SET quantity = quantity - p_lost_quantity 
         WHERE id = p_batch_id;
 
-        v_new_batch_id := p_batch_id || '-LOST-' || floor(random() * 1000)::text;
+        LOOP
+            v_new_batch_id := p_batch_id || '-LOST-' || floor(random() * 1000000)::text;
+            EXIT WHEN NOT EXISTS (SELECT 1 FROM public.batches WHERE id = v_new_batch_id);
+        END LOOP;
         
         INSERT INTO public.batches (
             id, 
