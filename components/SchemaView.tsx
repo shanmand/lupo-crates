@@ -27,7 +27,7 @@ const SchemaView: React.FC = () => {
     { name: 'locations', fields: ['id', 'name', 'type', 'category', 'branch_id (FK)', 'partner_type'] },
     { name: 'business_parties', fields: ['id', 'name', 'party_type (Customer/Supplier)', 'branch_id (FK)'] },
     { name: 'batches', fields: ['id', 'asset_id (FK)', 'quantity', 'current_location_id (FK)', 'status', 'is_settled'] },
-    { name: 'batch_movements', fields: ['id', 'batch_id (FK)', 'from_location_id (FK)', 'to_location_id (FK)', 'driver_id (FK)', 'truck_id (FK)', 'transaction_date'] },
+    { name: 'batch_movements', fields: ['id', 'batch_id (FK)', 'from_location_id (FK)', 'to_location_id (FK)', 'driver_id (FK)', 'moved_by_id', 'truck_id (FK)', 'transaction_date'] },
     { name: 'claims', fields: ['id', 'batch_id (FK)', 'type', 'status', 'amount_claimed_zar'] },
     { name: 'settlements', fields: ['id', 'supplier_id (FK)', 'gross_liability', 'cash_paid', 'discount_amount', 'start_date', 'end_date'] },
     { name: 'trucks', fields: ['id', 'plate_number'] },

@@ -154,6 +154,7 @@ CREATE TABLE public.batch_movements (
     to_location_id TEXT, -- Can be from locations or business_parties
     truck_id TEXT,
     driver_id TEXT,
+    moved_by_id TEXT,
     origin_user_id UUID,
     quantity INTEGER,
     condition TEXT DEFAULT 'Good',
@@ -1043,9 +1044,23 @@ GROUP BY s.id, s.name, s.latitude, s.longitude, s.type, s.branch_id;
 
 -- ASSIGNABLE PERSONNEL
 CREATE OR REPLACE VIEW public.vw_assignable_personnel AS
-SELECT id, full_name as name, branch_id, is_active
-FROM public.drivers
-WHERE is_active = TRUE;
+SELECT 
+    id::text, 
+    full_name as name, 
+    role_name as role, 
+    'User' as type,
+    branch_id,
+    is_active
+FROM public.users
+UNION ALL
+SELECT 
+    id, 
+    full_name as name, 
+    'Driver' as role, 
+    'Driver' as type,
+    branch_id,
+    is_active
+FROM public.drivers;
 
 -- INVENTORY SUMMARY
 DROP VIEW IF EXISTS public.vw_inventory_summary CASCADE;

@@ -1,13 +1,14 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { supabase } from './supabase';
-import { Location, Truck, Driver, AssetMaster, Batch, BusinessParty, Trip, LocationType } from './types';
+import { Location, Truck, Driver, AssetMaster, Batch, BusinessParty, Trip, LocationType, Personnel } from './types';
 
 interface MasterDataContextType {
   locations: Location[];
   businessParties: BusinessParty[];
   trucks: Truck[];
   drivers: Driver[];
+  personnel: Personnel[];
   assets: AssetMaster[];
   batches: Batch[];
   trips: Trip[];
@@ -18,6 +19,7 @@ interface MasterDataContextType {
   refreshBusinessParties: () => Promise<void>;
   refreshTrucks: () => Promise<void>;
   refreshDrivers: () => Promise<void>;
+  refreshPersonnel: () => Promise<void>;
   refreshAssets: () => Promise<void>;
   refreshBatches: () => Promise<void>;
   refreshTrips: () => Promise<void>;
@@ -32,6 +34,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
   const [businessParties, setBusinessParties] = useState<BusinessParty[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [personnel, setPersonnel] = useState<Personnel[]>([]);
   const [assets, setAssets] = useState<AssetMaster[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -84,6 +87,15 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
     if (!error && data) setDrivers(data);
   }, []);
 
+  const fetchPersonnel = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('vw_assignable_personnel')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+    if (!error && data) setPersonnel(data);
+  }, []);
+
   const fetchAssets = useCallback(async () => {
     const { data, error } = await supabase
       .from('asset_master')
@@ -127,6 +139,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
         fetchBusinessParties(),
         fetchTrucks(),
         fetchDrivers(),
+        fetchPersonnel(),
         fetchAssets(),
         fetchBatches(),
         fetchTrips(),
@@ -182,6 +195,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
     businessParties,
     trucks,
     drivers,
+    personnel,
     assets,
     batches,
     trips,
@@ -192,14 +206,15 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
     refreshBusinessParties: fetchBusinessParties,
     refreshTrucks: fetchTrucks,
     refreshDrivers: fetchDrivers,
+    refreshPersonnel: fetchPersonnel,
     refreshAssets: fetchAssets,
     refreshBatches: fetchBatches,
     refreshTrips: fetchTrips,
     refreshShifts: fetchShifts,
     refreshAll
   }), [
-    locations, businessParties, trucks, drivers, assets, batches, trips, activeShifts, isLoading, allSources,
-    fetchLocations, fetchBusinessParties, fetchTrucks, fetchDrivers, fetchAssets, fetchBatches, fetchTrips, fetchShifts, refreshAll
+    locations, businessParties, trucks, drivers, personnel, assets, batches, trips, activeShifts, isLoading, allSources,
+    fetchLocations, fetchBusinessParties, fetchTrucks, fetchDrivers, fetchPersonnel, fetchAssets, fetchBatches, fetchTrips, fetchShifts, refreshAll
   ]);
 
   return (

@@ -24,6 +24,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
     locations, 
     trucks, 
     drivers, 
+    personnel,
     assets: assetsMaster, 
     batches, 
     trips, 
@@ -37,6 +38,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
   const [destination, setDestination] = useState(''); 
   const [truckId, setTruckId] = useState('');
   const [driverId, setDriverId] = useState('');
+  const [movedById, setMovedById] = useState('');
   const [selectedTripId, setSelectedTripId] = useState('');
   const [selectedStopId, setSelectedStopId] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -76,6 +78,9 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
     }
     if (!isLoading && drivers.length > 0 && !driverId) {
       setDriverId(drivers[0].id);
+    }
+    if (!isLoading && personnel.length > 0 && !movedById) {
+      setMovedById(personnel[0].id);
     }
     if (!isLoading && assetsMaster.length > 0 && assets.length === 0) {
       setAssets([{ assetId: assetsMaster[0].id, quantity: 0 }]);
@@ -245,6 +250,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
             to_location_id: destination,
             truck_id: isInternal ? null : truckId,
             driver_id: isInternal ? null : driverId,
+            moved_by_id: isInternal ? movedById : null,
             trip_id: selectedTripId || null,
             trip_stop_id: selectedStopId || null,
             quantity: item.quantity,
@@ -540,31 +546,51 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
 
               {!isReadOnly && (
                 <>
-                  <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-3 gap-6 transition-all">
+                  <div className={`p-6 rounded-2xl border grid grid-cols-1 md:grid-cols-3 gap-6 transition-all ${isInternal ? 'bg-emerald-50/50 border-emerald-100' : 'bg-blue-50/50 border-blue-100'}`}>
+                    {!isInternal ? (
+                      <>
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><TruckIcon size={14} /> Select Truck</h4>
+                          <select 
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"
+                            value={truckId}
+                            onChange={e => setTruckId(e.target.value)}
+                          >
+                            <option value="">Select Truck</option>
+                            {trucks.map(t => <option key={t.id} value={t.id}>{t.plate_number}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserIcon size={14} /> Select Driver</h4>
+                          <select 
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"
+                            value={driverId}
+                            onChange={e => handleDriverChange(e.target.value)}
+                          >
+                            <option value="">Select Driver</option>
+                            {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="md:col-span-2 space-y-2">
+                        <h4 className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2"><UserCheck size={14} /> Employee / Mover</h4>
+                        <select 
+                          className="w-full border border-emerald-100 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
+                          value={movedById}
+                          onChange={e => setMovedById(e.target.value)}
+                        >
+                          <option value="">Select Employee</option>
+                          {personnel.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.type})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><TruckIcon size={14} /> Select Truck</h4>
-                      <select 
-                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"
-                        value={truckId}
-                        onChange={e => setTruckId(e.target.value)}
-                      >
-                        <option value="">Select Truck</option>
-                        {trucks.map(t => <option key={t.id} value={t.id}>{t.plate_number}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserIcon size={14} /> Select Driver</h4>
-                      <select 
-                        className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"
-                        value={driverId}
-                        onChange={e => handleDriverChange(e.target.value)}
-                      >
-                        <option value="">Select Driver</option>
-                        {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><ClipboardList size={14} /> Movement Date</h4>
+                      <h4 className={`text-xs font-bold uppercase flex items-center gap-2 ${isInternal ? 'text-emerald-600' : 'text-blue-600'}`}><ClipboardList size={14} /> Movement Date</h4>
                       <input 
                         type="date"
                         className="w-full border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"

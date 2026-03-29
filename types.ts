@@ -169,6 +169,14 @@ export interface TruckRoadworthyHistory {
   created_at?: string;
 }
 
+export interface Personnel {
+  id: string;
+  name: string;
+  branch_id?: string;
+  is_active: boolean;
+  type: 'Driver' | 'Staff';
+}
+
 export interface Driver {
   id: string;
   full_name: string;
@@ -242,6 +250,7 @@ export interface BatchMovement {
   quantity?: number;
   truck_id?: string;
   driver_id?: string;
+  moved_by_id?: string;
   timestamp?: string;
   condition?: MovementCondition;
   origin_user_id?: string;
