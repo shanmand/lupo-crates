@@ -804,7 +804,343 @@ SELECT
     am.supplier_id,
     b.quantity,
     (CURRENT_DATE - b.transaction_date)::INTEGER as days_aged,
-    public.calculate_batch_accrual(b.id) as zar_liability
+    public.calculate_batch_accrual(b.id) as zar_liability,
+    b.is_settled
 FROM public.batches b
 JOIN public.vw_all_sources s ON b.current_location_id = s.id
 JOIN public.asset_master am ON b.asset_id = am.id;
+
+-- 24. Settlement Module Enhancements
+-- ==================================
+
+-- Add is_settled to claims
+ALTER TABLE public.claims ADD COLUMN IF NOT EXISTS is_settled BOOLEAN DEFAULT FALSE;
+
+-- Create settlements table
+CREATE TABLE IF NOT EXISTS public.settlements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    supplier_id TEXT REFERENCES public.business_parties(id),
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    gross_liability NUMERIC NOT NULL,
+    discount_amount NUMERIC DEFAULT 0,
+    net_payable NUMERIC NOT NULL,
+    cash_paid NUMERIC NOT NULL,
+    payment_ref TEXT,
+    settled_by UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.settlements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all to authenticated" ON public.settlements;
+CREATE POLICY "Allow all to authenticated" ON public.settlements FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all to anon" ON public.settlements;
+CREATE POLICY "Allow all to anon" ON public.settlements FOR ALL TO anon USING (true) WITH CHECK (true);
+
+-- Enhanced Accrual Logic (Range-aware)
+CREATE OR REPLACE FUNCTION public.calculate_batch_accrual_in_range(
+    p_batch_id TEXT,
+    p_start_date DATE DEFAULT NULL,
+    p_end_date DATE DEFAULT NULL
+)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_batch_qty INT;
+    v_asset_id TEXT;
+    v_transaction_date DATE;
+    v_daily_rate NUMERIC;
+    v_days INT;
+    v_is_settled BOOLEAN;
+    v_settled_at TIMESTAMPTZ;
+    v_calc_start DATE;
+    v_calc_end DATE;
+BEGIN
+    -- Get batch details
+    SELECT quantity, asset_id, transaction_date, is_settled, settled_at
+    INTO v_batch_qty, v_asset_id, v_transaction_date, v_is_settled, v_settled_at
+    FROM public.batches WHERE id = p_batch_id;
+
+    IF v_batch_qty IS NULL THEN RETURN 0; END IF;
+
+    -- Get current daily rental rate
+    SELECT amount_zar INTO v_daily_rate
+    FROM public.fee_schedule 
+    WHERE asset_id = v_asset_id 
+    AND fee_type = 'Daily Rental (Supermarket)'
+    AND effective_to IS NULL
+    LIMIT 1;
+
+    IF v_daily_rate IS NULL THEN v_daily_rate := 0; END IF;
+
+    -- Determine calculation window
+    v_calc_start := GREATEST(v_transaction_date, COALESCE(p_start_date, v_transaction_date));
+    
+    IF v_is_settled THEN
+        v_calc_end := LEAST(v_settled_at::date, COALESCE(p_end_date, v_settled_at::date));
+    ELSE
+        v_calc_end := LEAST(CURRENT_DATE, COALESCE(p_end_date, CURRENT_DATE));
+    END IF;
+
+    -- Calculate days
+    v_days := GREATEST(0, (v_calc_end - v_calc_start))::INT;
+
+    RETURN COALESCE(v_batch_qty * v_daily_rate * v_days, 0);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Update standard calculate_batch_accrual to use the range-aware logic
+CREATE OR REPLACE FUNCTION public.calculate_batch_accrual(p_batch_id TEXT)
+RETURNS NUMERIC AS $$
+BEGIN
+    RETURN public.calculate_batch_accrual_in_range(p_batch_id, NULL, NULL);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Fix get_supplier_liability ambiguity (Drop both possible signatures)
+DROP FUNCTION IF EXISTS public.get_supplier_liability(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_supplier_liability(TEXT, DATE, DATE);
+
+CREATE OR REPLACE FUNCTION public.get_supplier_liability(
+    p_supplier_id TEXT,
+    p_start_date DATE,
+    p_end_date DATE
+)
+RETURNS TABLE (
+    batch_id TEXT,
+    asset_name TEXT,
+    days INTEGER,
+    amount_zar NUMERIC,
+    liability_type TEXT
+) AS $$
+BEGIN
+    -- 1. Rental Accruals (Outstanding)
+    RETURN QUERY
+    SELECT 
+        b.id as batch_id,
+        am.name as asset_name,
+        GREATEST(0, (LEAST(p_end_date, CURRENT_DATE) - b.transaction_date))::INTEGER as days,
+        public.calculate_batch_accrual_in_range(b.id, p_start_date, p_end_date) as amount_zar,
+        'Rental'::TEXT as liability_type
+    FROM public.batches b
+    JOIN public.asset_master am ON b.asset_id = am.id
+    WHERE am.supplier_id = p_supplier_id
+      AND b.is_settled = FALSE
+      AND b.transaction_date <= p_end_date;
+
+    -- 2. Asset Losses (Outstanding)
+    RETURN QUERY
+    SELECT 
+        al.batch_id,
+        am.name as asset_name,
+        0 as days,
+        (al.lost_quantity * fs.amount_zar)::NUMERIC as amount_zar,
+        'Loss'::TEXT as liability_type
+    FROM public.asset_losses al
+    JOIN public.batches b ON al.batch_id = b.id
+    JOIN public.asset_master am ON b.asset_id = am.id
+    JOIN public.fee_schedule fs ON am.id = fs.asset_id
+    WHERE am.supplier_id = p_supplier_id
+      AND al.is_settled = FALSE
+      AND fs.fee_type = 'Replacement Fee (Lost Equipment)'
+      AND fs.effective_to IS NULL
+      AND al.transaction_date BETWEEN p_start_date AND p_end_date;
+
+    -- 3. Penalties (Missing THAAN on Return)
+    RETURN QUERY
+    SELECT 
+        bm.batch_id,
+        am.name as asset_name,
+        0 as days,
+        250.00::NUMERIC as amount_zar,
+        'Penalty'::TEXT as liability_type
+    FROM public.batch_movements bm
+    JOIN public.batches b ON bm.batch_id = b.id
+    JOIN public.asset_master am ON b.asset_id = am.id
+    JOIN public.locations l ON bm.to_location_id = l.id
+    WHERE am.supplier_id = p_supplier_id
+      AND l.type = 'Returning to Supplier'
+      AND b.is_settled = FALSE
+      AND NOT EXISTS (SELECT 1 FROM public.thaan_slips ts WHERE ts.batch_id = bm.batch_id)
+      AND bm.transaction_date BETWEEN p_start_date AND p_end_date;
+
+    -- 4. Claims (Credits)
+    RETURN QUERY
+    SELECT 
+        c.batch_id,
+        am.name as asset_name,
+        0 as days,
+        (-c.amount_claimed_zar)::NUMERIC as amount_zar,
+        'Credit'::TEXT as liability_type
+    FROM public.claims c
+    JOIN public.batches b ON c.batch_id = b.id
+    JOIN public.asset_master am ON b.asset_id = am.id
+    WHERE am.supplier_id = p_supplier_id
+      AND c.status = 'Accepted'
+      AND c.is_settled = FALSE
+      AND c.created_at::date BETWEEN p_start_date AND p_end_date;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Finalize Settlement RPC
+CREATE OR REPLACE FUNCTION public.finalize_payment_settlement(
+    p_supplier_id TEXT,
+    p_start_date DATE,
+    p_end_date DATE,
+    p_gross_liability NUMERIC,
+    p_discount_amount NUMERIC,
+    p_net_payable NUMERIC,
+    p_cash_paid NUMERIC,
+    p_payment_ref TEXT,
+    p_settled_by UUID
+)
+RETURNS UUID AS $$
+DECLARE
+    v_settlement_id UUID;
+BEGIN
+    -- 1. Create settlement record
+    INSERT INTO public.settlements (
+        supplier_id,
+        start_date,
+        end_date,
+        gross_liability,
+        discount_amount,
+        net_payable,
+        cash_paid,
+        payment_ref,
+        settled_by
+    ) VALUES (
+        p_supplier_id,
+        p_start_date,
+        p_end_date,
+        p_gross_liability,
+        p_discount_amount,
+        p_net_payable,
+        p_cash_paid,
+        p_payment_ref,
+        p_settled_by
+    ) RETURNING id INTO v_settlement_id;
+
+    -- 2. Mark batches as settled
+    UPDATE public.batches b
+    SET is_settled = TRUE,
+        settled_at = NOW()
+    FROM public.asset_master am
+    WHERE b.asset_id = am.id
+      AND am.supplier_id = p_supplier_id
+      AND b.is_settled = FALSE
+      AND b.transaction_date <= p_end_date;
+
+    -- 3. Mark losses as settled
+    UPDATE public.asset_losses al
+    SET is_settled = TRUE
+    FROM public.batches b
+    JOIN public.asset_master am ON b.asset_id = am.id
+    WHERE al.batch_id = b.id
+      AND am.supplier_id = p_supplier_id
+      AND al.is_settled = FALSE
+      AND al.transaction_date <= p_end_date;
+
+    -- 4. Mark claims as settled
+    UPDATE public.claims c
+    SET is_settled = TRUE
+    FROM public.batches b
+    JOIN public.asset_master am ON b.asset_id = am.id
+    WHERE c.batch_id = b.id
+      AND am.supplier_id = p_supplier_id
+      AND c.status = 'Accepted'
+      AND c.is_settled = FALSE
+      AND c.created_at::date <= p_end_date;
+
+    RETURN v_settlement_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Fix get_supplier_liability ambiguity (Drop both possible signatures and create one)
+DROP FUNCTION IF EXISTS public.get_supplier_liability(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_supplier_liability(TEXT, DATE, DATE);
+
+CREATE OR REPLACE FUNCTION public.get_supplier_liability(
+    p_supplier_id TEXT,
+    p_start_date DATE,
+    p_end_date DATE
+)
+RETURNS TABLE (
+    batch_id TEXT,
+    asset_name TEXT,
+    days INTEGER,
+    amount_zar NUMERIC,
+    liability_type TEXT
+) AS $$
+BEGIN
+    -- 1. Rental Accruals (Outstanding)
+    RETURN QUERY
+    SELECT 
+        b.id as batch_id,
+        am.name as asset_name,
+        GREATEST(0, (LEAST(p_end_date, CURRENT_DATE) - b.transaction_date))::INTEGER as days,
+        public.calculate_batch_accrual_in_range(b.id, p_start_date, p_end_date) as amount_zar,
+        'Rental'::TEXT as liability_type
+    FROM public.batches b
+    JOIN public.asset_master am ON b.asset_id = am.id
+    WHERE am.supplier_id = p_supplier_id
+      AND b.is_settled = FALSE
+      AND b.transaction_date <= p_end_date;
+
+    -- 2. Asset Losses (Outstanding)
+    RETURN QUERY
+    SELECT 
+        al.batch_id,
+        am.name as asset_name,
+        0 as days,
+        (al.lost_quantity * fs.amount_zar)::NUMERIC as amount_zar,
+        'Loss'::TEXT as liability_type
+    FROM public.asset_losses al
+    JOIN public.batches b ON al.batch_id = b.id
+    JOIN public.asset_master am ON b.asset_id = am.id
+    JOIN public.fee_schedule fs ON am.id = fs.asset_id
+    WHERE am.supplier_id = p_supplier_id
+      AND al.is_settled = FALSE
+      AND fs.fee_type = 'Replacement Fee (Lost Equipment)'
+      AND fs.effective_to IS NULL
+      AND al.transaction_date BETWEEN p_start_date AND p_end_date;
+
+    -- 3. Penalties (Missing THAAN on Return)
+    RETURN QUERY
+    SELECT 
+        b.id as batch_id,
+        am.name as asset_name,
+        0 as days,
+        150.00::NUMERIC as amount_zar, -- Flat penalty for missing THAAN
+        'Penalty'::TEXT as liability_type
+    FROM public.batches b
+    JOIN public.asset_master am ON b.asset_id = am.id
+    WHERE am.supplier_id = p_supplier_id
+      AND b.is_settled = FALSE
+      AND b.status = 'Returned'
+      AND b.return_reference IS NULL
+      AND b.transaction_date BETWEEN p_start_date AND p_end_date;
+
+    -- 4. Credits (Salvage/Offsets)
+    RETURN QUERY
+    SELECT 
+        al.batch_id,
+        am.name as asset_name,
+        0 as days,
+        -((al.lost_quantity * fs.amount_zar) * 0.10)::NUMERIC as amount_zar, -- 10% Salvage Credit
+        'Credit'::TEXT as liability_type
+    FROM public.asset_losses al
+    JOIN public.batches b ON al.batch_id = b.id
+    JOIN public.asset_master am ON b.asset_id = am.id
+    JOIN public.fee_schedule fs ON am.id = fs.asset_id
+    WHERE am.supplier_id = p_supplier_id
+      AND al.is_settled = FALSE
+      AND al.loss_type = 'Scrapped'
+      AND fs.fee_type = 'Replacement Fee (Lost Equipment)'
+      AND fs.effective_to IS NULL
+      AND al.transaction_date BETWEEN p_start_date AND p_end_date;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Refresh schema cache
+NOTIFY pgrst, 'reload schema';

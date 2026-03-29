@@ -150,9 +150,10 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         // Logic: External Assets at Returning locations (Supplier Yard) are removed from our account
         const isOurAccount = !(asset?.ownership_type === 'External' && loc?.type === LocationType.RETURNING);
 
-        // If filtering by a specific supplier, we want to see their assets even if they are at the returning location (for audit)
-        // but for RENTAL settlement, they must be in our account.
-        return !!fee && matchesBranch && matchesSupplier && matchesDate && isOurAccount;
+        // Only show unsettled batches in the active settlement report
+        const isOutstanding = !b.is_settled;
+
+        return !!fee && matchesBranch && matchesSupplier && matchesDate && isOurAccount && isOutstanding;
     }).map(b => {
         const asset = assets.find(a => a.id === b.asset_id);
         const fee = fees.find(f => f.asset_id === b.asset_id && f.fee_type === FeeType.DAILY_RENTAL && f.effective_to === null);
@@ -182,7 +183,8 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     const lossItems = losses.filter(l => {
         const batch = batches.find(b => b.id === l.batch_id);
         const asset = assets.find(a => a.id === batch?.asset_id);
-        return selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
+        const matchesSupplier = selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
+        return matchesSupplier && !l.is_settled;
     }).map(l => {
         const batch = batches.find(b => b.id === l.batch_id);
         const fee = fees.find(f => f.asset_id === batch?.asset_id && f.fee_type === FeeType.REPLACEMENT_FEE);
@@ -207,7 +209,8 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const batch = batches.find(b => b.id === m.batch_id);
         const asset = assets.find(a => a.id === batch?.asset_id);
         const matchesSupplier = selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
-        return toLoc?.type === LocationType.RETURNING && !thaan && matchesSupplier;
+        // Only penalize unsettled batches
+        return toLoc?.type === LocationType.RETURNING && !thaan && matchesSupplier && batch && !batch.is_settled;
     }).map(m => {
         const penaltyFee = 250.00; 
         const branch = locations.find(l => l.id === m.from_location_id)?.name || "Unallocated";
@@ -224,7 +227,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const batch = batches.find(b => b.id === c.batch_id);
         const asset = assets.find(a => a.id === batch?.asset_id);
         const matchesSupplier = selectedSupplier === 'all' || asset?.supplier_id === selectedSupplier;
-        return c.status === 'Accepted' && matchesSupplier;
+        return c.status === 'Accepted' && matchesSupplier && !c.is_settled;
     }).map(c => {
         const branch = "Johannesburg Plant"; 
         return {
@@ -266,7 +269,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
         const loss = losses.find(l => l.batch_id === b.id);
         const thaan = thaans.find(t => t.batch_id === b.id);
         
-        const calcEndDate = loss ? new Date(loss.timestamp) : (thaan ? new Date(thaan.signed_at) : new Date());
+        const calcEndDate = b.is_settled && b.settled_at ? new Date(b.settled_at) : (loss ? new Date(loss.timestamp) : (thaan ? new Date(thaan.signed_at) : new Date()));
         const calcStartDate = new Date(b.transaction_date || b.created_at || '');
         const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
         const zarLiability = daysAged * (fee?.amount_zar || 0) * b.quantity;
@@ -278,7 +281,8 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
             supplier_id: asset?.supplier_id,
             quantity: b.quantity,
             days_aged: daysAged,
-            zar_liability: zarLiability
+            zar_liability: zarLiability,
+            is_settled: b.is_settled
         };
     });
 
@@ -659,13 +663,21 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                     <td className="px-6 py-5 font-bold text-slate-600 text-sm">{record.asset_name}</td>
                     <td className="px-6 py-5 text-center font-black text-slate-900 text-sm">{record.quantity}</td>
                     <td className="px-6 py-5 text-center">
-                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase inline-flex items-center gap-1 ${
-                        record.days_aged > 30 ? 'bg-rose-50 text-rose-600' : 
-                        record.days_aged > 14 ? 'bg-amber-50 text-amber-600' : 
-                        'bg-emerald-50 text-emerald-600'
-                      }`}>
-                        <Clock size={10} /> {record.days_aged} Days
-                      </span>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase inline-flex items-center gap-1 ${
+                          record.is_settled ? 'bg-slate-100 text-slate-500' :
+                          record.days_aged > 30 ? 'bg-rose-50 text-rose-600' : 
+                          record.days_aged > 14 ? 'bg-amber-50 text-amber-600' : 
+                          'bg-emerald-50 text-emerald-600'
+                        }`}>
+                          <Clock size={10} /> {record.days_aged} Days
+                        </span>
+                        {record.is_settled && (
+                          <span className="text-[8px] font-black text-emerald-600 uppercase tracking-tighter flex items-center gap-0.5">
+                            <CheckCircle2 size={8} /> Settled
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-8 py-5 text-right">
                       <span className="font-black text-slate-900 text-sm">R {formatCurrency(record.zar_liability || 0)}</span>

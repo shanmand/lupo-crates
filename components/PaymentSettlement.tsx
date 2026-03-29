@@ -12,7 +12,8 @@ import {
   Receipt,
   MinusCircle,
   PlusCircle,
-  FileText
+  FileText,
+  Calculator
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Location, User, BusinessParty } from '../types';
@@ -26,7 +27,7 @@ interface LiabilityRecord {
   asset_name: string;
   days: number;
   amount_zar: number;
-  liability_type: 'Rental' | 'Loss' | 'Credit';
+  liability_type: 'Rental' | 'Loss' | 'Credit' | 'Penalty';
 }
 
 const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) => {
@@ -103,7 +104,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
         p_net_payable: netPayable,
         p_cash_paid: cashPaid,
         p_payment_ref: paymentRef,
-        p_settled_by: currentUser?.id || '00000000-0000-0000-0000-000000000000'
+        p_settled_by: currentUser?.email || 'System'
       });
 
       if (error) throw error;
@@ -238,38 +239,53 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{records.length} Records Found</span>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50/50">
-                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</th>
-                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset</th>
-                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Days</th>
-                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
-                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total ZAR</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {records.map((r, i) => (
-                          <tr key={i} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4 text-xs font-bold text-slate-900">{r.batch_id}</td>
-                            <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.asset_name}</td>
-                            <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.days > 0 ? r.days : '-'}</td>
-                            <td className="px-6 py-4">
-                              <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
-                                r.liability_type === 'Rental' ? 'bg-blue-100 text-blue-700' :
-                                r.liability_type === 'Loss' ? 'bg-amber-100 text-amber-700' :
-                                'bg-emerald-100 text-emerald-700'
-                              }`}>
-                                {r.liability_type}
-                              </span>
-                            </td>
-                            <td className={`px-6 py-4 text-xs font-black text-right ${Number(r.amount_zar) < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                              R {formatCurrency(Number(r.amount_zar))}
-                            </td>
+                    {!selectedSupplier ? (
+                      <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                        <Calculator size={48} className="mb-4 opacity-20" />
+                        <p className="text-sm font-bold uppercase tracking-widest">Select a supplier to calculate liability</p>
+                      </div>
+                    ) : (
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50/50">
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</th>
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset</th>
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Days</th>
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total ZAR</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {records.map((r, i) => (
+                            <tr key={i} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-6 py-4 text-xs font-bold text-slate-900">{r.batch_id}</td>
+                              <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.asset_name}</td>
+                              <td className="px-6 py-4 text-xs font-medium text-slate-600">{r.days > 0 ? r.days : '-'}</td>
+                              <td className="px-6 py-4">
+                                <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
+                                  r.liability_type === 'Rental' ? 'bg-blue-100 text-blue-700' :
+                                  r.liability_type === 'Loss' ? 'bg-amber-100 text-amber-700' :
+                                  r.liability_type === 'Penalty' ? 'bg-rose-100 text-rose-700' :
+                                  'bg-emerald-100 text-emerald-700'
+                                }`}>
+                                  {r.liability_type}
+                                </span>
+                              </td>
+                              <td className={`px-6 py-4 text-xs font-black text-right ${Number(r.amount_zar) < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                                R {formatCurrency(Number(r.amount_zar))}
+                              </td>
+                            </tr>
+                          ))}
+                          {records.length === 0 && !isCalculating && (
+                            <tr>
+                              <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
+                                No outstanding liability found for this period.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 </div>
 
