@@ -39,6 +39,7 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
   const [truckId, setTruckId] = useState('');
   const [driverId, setDriverId] = useState('');
   const [movedById, setMovedById] = useState('');
+  const [movedByName, setMovedByName] = useState('');
   const [selectedTripId, setSelectedTripId] = useState('');
   const [selectedStopId, setSelectedStopId] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -250,7 +251,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
             to_location_id: destination,
             truck_id: isInternal ? null : truckId,
             driver_id: isInternal ? null : driverId,
-            moved_by_id: isInternal ? movedById : null,
+            moved_by_id: movedById || null,
+            moved_by_name: movedByName || null,
             trip_id: selectedTripId || null,
             trip_stop_id: selectedStopId || null,
             quantity: item.quantity,
@@ -346,6 +348,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
       }
       setThaanFile(null);
       setRouteInstructions('');
+      setMovedById('');
+      setMovedByName('');
       refreshAll(); // Refresh data
     } catch (err: any) {
       console.error("Movement capture error:", err);
@@ -575,18 +579,33 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                     ) : (
                       <div className="md:col-span-2 space-y-2">
                         <h4 className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2"><UserCheck size={14} /> Employee / Mover</h4>
-                        <select 
-                          className="w-full border border-emerald-100 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
-                          value={movedById}
-                          onChange={e => setMovedById(e.target.value)}
-                        >
-                          <option value="">Select Employee</option>
-                          {personnel.map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} ({p.type})
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex gap-2">
+                          <select 
+                            className="flex-1 border border-emerald-100 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
+                            value={movedById}
+                            onChange={e => {
+                              setMovedById(e.target.value);
+                              if (e.target.value !== 'manual') setMovedByName('');
+                            }}
+                          >
+                            <option value="">Select Employee</option>
+                            {personnel.map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.type})
+                              </option>
+                            ))}
+                            <option value="manual">-- Manual Entry --</option>
+                          </select>
+                          {movedById === 'manual' && (
+                            <input 
+                              type="text"
+                              placeholder="Enter Name"
+                              className="flex-1 border border-emerald-100 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                              value={movedByName}
+                              onChange={e => setMovedByName(e.target.value)}
+                            />
+                          )}
+                        </div>
                       </div>
                     )}
                     <div className="space-y-2">
@@ -598,6 +617,39 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                         onChange={e => setMovementDate(e.target.value)}
                       />
                     </div>
+                    
+                    {!isInternal && (
+                      <div className="md:col-span-3 space-y-2 pt-4 border-t border-blue-100">
+                        <h4 className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><UserCheck size={14} /> Dispatching / Receiving Employee (Optional)</h4>
+                        <div className="flex gap-2">
+                          <select 
+                            className="flex-1 border border-slate-200 rounded-xl p-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 transition-all"
+                            value={movedById}
+                            onChange={e => {
+                              setMovedById(e.target.value);
+                              if (e.target.value !== 'manual') setMovedByName('');
+                            }}
+                          >
+                            <option value="">Select Employee</option>
+                            {personnel.map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.type})
+                              </option>
+                            ))}
+                            <option value="manual">-- Manual Entry --</option>
+                          </select>
+                          {movedById === 'manual' && (
+                            <input 
+                              type="text"
+                              placeholder="Enter Name"
+                              className="flex-1 border border-slate-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                              value={movedByName}
+                              onChange={e => setMovedByName(e.target.value)}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Route & Instructions */}

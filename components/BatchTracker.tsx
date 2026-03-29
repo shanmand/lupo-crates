@@ -13,6 +13,7 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
     locations, 
     trucks, 
     drivers, 
+    personnel,
     assets: assetsMaster, 
     refreshAll 
   } = useMasterData();
@@ -64,18 +65,20 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
           const sFrom = allSources.find(s => s.id === bm.from_location_id);
           const driver = drivers.find(d => d.id === bm.driver_id);
           const truck = trucks.find(t => t.id === bm.truck_id);
+          const person = personnel.find(p => p.id === bm.moved_by_id);
           
           return {
             movement_id: bm.id,
             batch_id: bm.batch_id,
             transaction_date: bm.transaction_date,
             timestamp: bm.timestamp,
-            driver_name: driver?.full_name || 'Unknown',
+            driver_name: driver?.full_name || null,
+            moved_by_name: bm.moved_by_name || person?.name || null,
             quantity: bm.quantity || batchRes.data?.quantity,
             to_location_name: sTo?.name || 'Unknown',
             to_location_id: sTo?.id,
             from_location_name: sFrom?.name || 'Unknown',
-            truck_plate: truck?.plate_number || 'Unknown',
+            truck_plate: truck?.plate_number || null,
             condition: bm.condition,
             custodian_branch_id: sTo?.branch_id
           } as LogisticsTrace;
@@ -225,7 +228,7 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            On {new Date(trace.timestamp).toLocaleDateString('en-ZA')}, {trace.driver_name || 'Unknown Driver'} moved {trace.quantity} crates to {trace.to_location_name} using Truck {trace.truck_plate || 'N/A'}
+                            On {new Date(trace.timestamp).toLocaleDateString('en-ZA')}, {trace.driver_name || trace.moved_by_name || 'System'} moved {trace.quantity} crates to {trace.to_location_name} {trace.truck_plate ? `using Truck ${trace.truck_plate}` : ''}
                           </p>
                           <h4 className="font-bold text-slate-800 text-lg mt-1">{trace.from_location_name} &rarr; {trace.to_location_name}</h4>
                           <div className="flex gap-2 mt-2">
@@ -236,6 +239,7 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
                             }`}>{trace.condition}</span>
                             {trace.truck_plate && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><TruckIcon size={10} /> {trace.truck_plate}</span>}
                             {trace.driver_name && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><UserIcon size={10} /> {trace.driver_name}</span>}
+                            {trace.moved_by_name && <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><UserIcon size={10} /> {trace.moved_by_name}</span>}
                           </div>
                         </div>
                       </div>

@@ -251,6 +251,7 @@ export interface BatchMovement {
   truck_id?: string;
   driver_id?: string;
   moved_by_id?: string;
+  moved_by_name?: string;
   timestamp?: string;
   condition?: MovementCondition;
   origin_user_id?: string;
@@ -262,6 +263,7 @@ export interface LogisticsTrace {
   transaction_date: string;
   timestamp: string;
   driver_name: string | null;
+  moved_by_name?: string | null;
   quantity: number;
   to_location_name: string;
   to_location_id: string;

@@ -63,58 +63,75 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
 
       setIsLoading(true);
       try {
-        const [bRes, sources, fRes, lossRes, brRes] = await Promise.all([
-          supabase.from('batches').select('*'),
-          fetchAllSources(),
-          supabase.from('fee_schedule').select('*'),
-          supabase.from('asset_losses').select('*'),
-          supabase.from('branches').select('*')
-        ]);
+        // Use the database view for consolidated metrics
+        const { data: viewData, error: viewError } = await supabase
+          .from('vw_executive_report')
+          .select('*');
 
-        if (bRes.data && brRes.data) {
-          const mapped = brRes.data.map((branch: any) => {
-            const branchBatches = bRes.data.filter((b: any) => {
-              const loc = sources.find((l: any) => l.id === b.current_location_id);
-              return loc?.branch_id === branch.id;
+        if (viewError) {
+          console.error("Executive Report View Error:", viewError);
+          // Fallback to manual aggregation if view fails (might not be created yet)
+          const [bRes, sources, fRes, lossRes, brRes] = await Promise.all([
+            supabase.from('batches').select('*'),
+            fetchAllSources(),
+            supabase.from('fee_schedule').select('*'),
+            supabase.from('asset_losses').select('*'),
+            supabase.from('branches').select('*')
+          ]);
+
+          if (brRes.data && brRes.data.length > 0) {
+            const mapped = brRes.data.map((branch: any) => {
+              const branchBatches = bRes.data?.filter((b: any) => {
+                const loc = sources.find((l: any) => l.id === b.current_location_id);
+                return loc?.branch_id === branch.id;
+              }) || [];
+
+              const totalAssets = branchBatches.reduce((sum: number, b: any) => sum + b.quantity, 0);
+              const branchLosses = lossRes.data?.filter((l: any) => {
+                const loc = sources.find((loc: any) => loc.id === l.location_id);
+                return loc?.branch_id === branch.id;
+              }) || [];
+              const lostUnits = branchLosses.reduce((sum: number, l: any) => sum + l.lost_quantity, 0);
+              const lossRatio = totalAssets > 0 ? (lostUnits / totalAssets) * 100 : 0;
+
+              const financialDrainage = branchBatches.reduce((sum: number, b: any) => {
+                const fee = fRes.data?.find((f: any) => f.asset_id === b.asset_id && f.fee_type?.includes('Daily Rental') && f.effective_to === null);
+                const calcEndDate = new Date();
+                const calcStartDate = new Date(b.transaction_date || b.created_at || '');
+                const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+                return sum + (daysAged * (fee?.amount_zar || 0) * b.quantity);
+              }, 0);
+
+              const stagnantUnits = branchBatches.filter((b: any) => {
+                const calcEndDate = new Date();
+                const calcStartDate = new Date(b.transaction_date || b.created_at || '');
+                const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+                return daysAged > 14; // Standardized to 14 days per view definition
+              }).length;
+
+              return {
+                branch_id: branch.id,
+                branch_name: branch.name,
+                total_units: totalAssets,
+                stagnant_units: stagnantUnits,
+                financial_drainage: financialDrainage,
+                lost_units: lostUnits,
+                loss_ratio: lossRatio,
+                oldest_stagnant_driver: 'N/A',
+                oldest_stagnant_location: 'N/A',
+                oldest_stagnant_batch_id: 'N/A'
+              };
             });
-
-            const totalAssets = branchBatches.reduce((sum: number, b: any) => sum + b.quantity, 0);
-            const branchLosses = lossRes.data?.filter((l: any) => {
-              const loc = sources.find((loc: any) => loc.id === l.location_id);
-              return loc?.branch_id === branch.id;
-            }) || [];
-            const lostUnits = branchLosses.reduce((sum: number, l: any) => sum + l.lost_quantity, 0);
-            const lossRatio = totalAssets > 0 ? (lostUnits / totalAssets) * 100 : 0;
-
-            const financialDrainage = branchBatches.reduce((sum: number, b: any) => {
-              const fee = fRes.data?.find((f: any) => f.asset_id === b.asset_id && f.fee_type.includes('Daily Rental') && f.effective_to === null);
-              const calcEndDate = new Date();
-              const calcStartDate = new Date(b.transaction_date || b.created_at || '');
-              const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
-              return sum + (daysAged * (fee?.amount_zar || 0) * b.quantity);
-            }, 0);
-
-            const stagnantUnits = branchBatches.filter((b: any) => {
-              const calcEndDate = new Date();
-              const calcStartDate = new Date(b.transaction_date || b.created_at || '');
-              const daysAged = Math.max(0, Math.floor((calcEndDate.getTime() - calcStartDate.getTime()) / (1000 * 60 * 60 * 24)));
-              return daysAged > 30;
-            }).length;
-
-            return {
-              branch_id: branch.id,
-              branch_name: branch.name,
-              active_inventory: totalAssets,
-              stagnant_units: stagnantUnits,
-              financial_drainage: financialDrainage,
-              lost_units: lostUnits,
-              loss_ratio: lossRatio,
-              oldest_stagnant_driver: 'N/A',
-              oldest_stagnant_location: 'N/A',
-              oldest_stagnant_batch_id: 'N/A'
-            };
-          });
-          setReportData(mapped);
+            setReportData(mapped);
+          } else {
+            // No branches found, use mock data for demo purposes
+            setReportData(MOCK_EXECUTIVE_DATA);
+          }
+        } else if (viewData && viewData.length > 0) {
+          setReportData(viewData as ExecutiveReportRow[]);
+        } else {
+          // View returned no data, might be empty database
+          setReportData(MOCK_EXECUTIVE_DATA);
         }
       } catch (err) {
         console.error("Executive Report Fetch Error:", err);

@@ -155,6 +155,7 @@ CREATE TABLE public.batch_movements (
     truck_id TEXT,
     driver_id TEXT,
     moved_by_id TEXT,
+    moved_by_name TEXT,
     origin_user_id UUID,
     quantity INTEGER,
     condition TEXT DEFAULT 'Good',
