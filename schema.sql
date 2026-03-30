@@ -317,11 +317,22 @@ CREATE TABLE public.audit_logs (
 
 CREATE TABLE public.vehicle_inspections (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    driver_id TEXT REFERENCES public.drivers(id),
     truck_id TEXT REFERENCES public.trucks(id),
-    inspector_id UUID,
     inspection_date DATE DEFAULT CURRENT_DATE,
-    status TEXT DEFAULT 'Pass', -- Pass, Fail, Advisory
-    notes TEXT,
+    odometer_reading INTEGER,
+    odometer_photo_url TEXT,
+    tyres_ok BOOLEAN DEFAULT true,
+    lights_ok BOOLEAN DEFAULT true,
+    brakes_ok BOOLEAN DEFAULT true,
+    fluids_ok BOOLEAN DEFAULT true,
+    license_disc_present BOOLEAN DEFAULT true,
+    fault_description TEXT,
+    fault_photo_url TEXT,
+    is_grounded BOOLEAN DEFAULT false,
+    branch_id TEXT REFERENCES public.branches(id),
+    latitude NUMERIC,
+    longitude NUMERIC,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
