@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MapPin, Package, Building2, TrendingUp, Zap, Loader2, Search, Filter, ArrowRight, Layers, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
+import { formatNumber } from '../constants';
 
 const InventoryMap: React.FC = () => {
   const [locations, setLocations] = useState<any[]>([]);
@@ -80,7 +81,7 @@ const InventoryMap: React.FC = () => {
           </div>
           <div className="relative z-10 space-y-2">
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Global Asset Distribution</p>
-            <p className="text-5xl font-black tracking-tighter">{totalAssets.toLocaleString()}</p>
+            <p className="text-5xl font-black tracking-tighter">{formatNumber(totalAssets)}</p>
             <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
               <Zap size={12} /> Live Inventory Pulse
             </p>
@@ -135,7 +136,7 @@ const InventoryMap: React.FC = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-black text-slate-900">{loc.total_assets.toLocaleString()}</p>
+                  <p className="text-sm font-black text-slate-900">{formatNumber(loc.total_assets)}</p>
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Units</p>
                 </div>
               </button>
@@ -167,7 +168,7 @@ const InventoryMap: React.FC = () => {
                   <div className="grid grid-cols-2 gap-6">
                     <div className="p-4 bg-slate-50 rounded-2xl">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Stock</p>
-                      <p className="text-2xl font-black text-slate-900">{selectedLocation.total_assets.toLocaleString()}</p>
+                      <p className="text-2xl font-black text-slate-900">{formatNumber(selectedLocation.total_assets)}</p>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-2xl">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Asset Types</p>

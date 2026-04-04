@@ -8,7 +8,8 @@ import {
   MOCK_ASSETS, 
   MOCK_LOCATIONS,
   MOCK_MOVEMENTS,
-  MOCK_THAANS 
+  MOCK_THAANS,
+  formatCurrency
 } from '../constants';
 import { FeeType, LocationType, LossType, PartnerType, Batch, FeeSchedule, AssetLoss, Claim, AssetMaster, Location, BatchMovement, ThaanSlip, Branch } from '../types';
 import { 
@@ -66,7 +67,6 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
     const now = new Date();
     return now.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
   }, [startDate, endDate]);
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   useEffect(() => {
     // Set default dates to current month
@@ -448,28 +448,28 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
             <SummaryCard 
                 title="Total Settlement" 
-                value={`R ${formatCurrency(reportData.grandTotal)}`} 
+                value={formatCurrency(reportData.grandTotal)} 
                 desc="Final Net Payment Amount" 
                 type="main" 
                 icon={<Calculator size={24} />}
             />
             <SummaryCard 
                 title="Rental Subtotal" 
-                value={`R ${formatCurrency(reportData.rentalSubtotal)}`} 
+                value={formatCurrency(reportData.rentalSubtotal)} 
                 desc="Daily Accruals (Active + Stopped)" 
                 type="cost" 
                 icon={<TrendingUp size={24} />}
             />
             <SummaryCard 
                 title="Losses & Penalties" 
-                value={`R ${formatCurrency(reportData.lossSubtotal + reportData.penaltySubtotal)}`} 
+                value={formatCurrency(reportData.lossSubtotal + reportData.penaltySubtotal)} 
                 desc="Replacement Costs & Missing THAANs" 
                 type="cost" 
                 icon={<Skull size={24} />}
             />
             <SummaryCard 
                 title="Claims Offset" 
-                value={`- R ${formatCurrency(reportData.offsetSubtotal)}`} 
+                value={`- ${formatCurrency(reportData.offsetSubtotal)}`} 
                 desc="Accepted Credit Deductions" 
                 type="credit" 
                 icon={<MinusCircle size={24} />}
@@ -530,7 +530,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                                         </td>
                                         <td className="px-6 py-4 text-center font-bold text-slate-600">{r.days}d</td>
                                         <td className="px-6 py-4 text-center text-slate-400">R {r.rate.toFixed(2)}</td>
-                                        <td className="px-6 py-4 text-right font-black text-slate-800">R {formatCurrency(r.total)}</td>
+                                        <td className="px-6 py-4 text-right font-black text-slate-800">{formatCurrency(r.total)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -551,7 +551,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                                         <p className="font-bold text-slate-800">{l.asset}</p>
                                         <p className="text-[10px] text-slate-400">{l.qty} Units • {l.reason}</p>
                                     </div>
-                                    <p className="font-bold text-rose-700 group-hover:translate-x-1 transition-transform">R {formatCurrency(l.total)}</p>
+                                    <p className="font-bold text-rose-700 group-hover:translate-x-1 transition-transform">{formatCurrency(l.total)}</p>
                                 </div>
                             ))}
                         </div>
@@ -568,7 +568,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                                         <p className="font-bold text-slate-800">{o.id}</p>
                                         <p className="text-[10px] text-slate-400">{o.reason}</p>
                                     </div>
-                                    <p className="font-bold text-emerald-600 group-hover:translate-x-1 transition-transform">- R {formatCurrency(o.total)}</p>
+                                    <p className="font-bold text-emerald-600 group-hover:translate-x-1 transition-transform">- {formatCurrency(o.total)}</p>
                                 </div>
                             ))}
                             {reportData.offsets.length === 0 && <p className="text-center text-[10px] text-slate-400 italic py-4">No accepted claims this month</p>}
@@ -588,7 +588,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                             <div key={branch} className="space-y-2">
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm font-bold text-slate-100">{branch}</span>
-                                    <span className="text-sm font-black text-white">R {formatCurrency(total)}</span>
+                                    <span className="text-sm font-black text-white">{formatCurrency(total)}</span>
                                 </div>
                                 <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
                                     <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.max(0, (total / (reportData.grandTotal || 1)) * 100)}%` }} />
@@ -610,14 +610,14 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                     <div className="space-y-3">
                         <LogicItem label="Hard Stop Policy" desc="Rental fees truncate on loss_timestamp." />
                         <LogicItem label="Historical Rates" desc="Fees applied based on receipt_date schedule." />
-                        <LogicItem label="THAAN Penalty" desc={`Fixed R ${formatCurrency(250.00)} fine per missing POD return.`} />
+                        <LogicItem label="THAAN Penalty" desc={`Fixed ${formatCurrency(250.00)} fine per missing POD return.`} />
                     </div>
                 </div>
 
                 <div className="bg-amber-50 border border-amber-100 p-6 rounded-2xl flex gap-3">
                     <AlertCircle className="text-amber-500 shrink-0" size={20} />
                     <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                        The total settlement value includes a R {formatCurrency(reportData.penaltySubtotal)} penalty for items returned to Supplier Yard without valid signature capture.
+                        The total settlement value includes a {formatCurrency(reportData.penaltySubtotal)} penalty for items returned to Supplier Yard without valid signature capture.
                     </p>
                 </div>
             </div>
@@ -680,7 +680,7 @@ const SupplierSettlementReport: React.FC<SupplierSettlementReportProps> = ({ isA
                       </div>
                     </td>
                     <td className="px-8 py-5 text-right">
-                      <span className="font-black text-slate-900 text-sm">R {formatCurrency(record.zar_liability || 0)}</span>
+                      <span className="font-black text-slate-900 text-sm">{formatCurrency(record.zar_liability || 0)}</span>
                     </td>
                   </tr>
                 ))}
@@ -741,7 +741,7 @@ const AgeBox: React.FC<{ label: string, value: number, color: 'emerald' | 'amber
   return (
     <div className={`p-4 rounded-xl border ${colors[color]} flex flex-col items-center justify-center text-center`}>
       <span className="text-[10px] font-black uppercase tracking-tighter mb-1 opacity-60">{label}</span>
-      <span className="text-lg font-black tracking-tight">R {value.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</span>
+      <span className="text-lg font-black tracking-tight">{formatCurrency(value)}</span>
     </div>
   );
 };

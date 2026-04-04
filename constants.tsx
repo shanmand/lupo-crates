@@ -54,6 +54,35 @@ export const MOCK_FEES: FeeSchedule[] = [
   { id: 'FEE-SAL-01', asset_id: 'SH-001', fee_type: FeeType.SALVAGE_CREDIT, amount_zar: 15.00, effective_from: '2025-01-01', effective_to: null },
 ];
 
+export const formatCurrency = (val: number | string | null | undefined) => {
+  const num = typeof val === 'string' ? parseFloat(val) : val;
+  if (num === null || num === undefined || isNaN(num)) return 'R0.00';
+  
+  // South African Rand format: R2 380.21
+  // We use 'en-ZA' which uses space as thousands separator and ',' as decimal separator.
+  // We replace the comma with a dot to meet the user's requirement.
+  return 'R' + num.toLocaleString('en-ZA', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  }).replace(',', '.');
+};
+
+export const formatNumber = (val: number | string | null | undefined) => {
+  const num = typeof val === 'string' ? parseFloat(val) : val;
+  if (num === null || num === undefined || isNaN(num)) return '0';
+  
+  return num.toLocaleString('en-ZA').replace(',', '.');
+};
+
+export const formatDateTime = (date: string | Date | null | undefined) => {
+  if (!date) return 'N/A';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return 'Invalid Date';
+  
+  // Standard format for the app: YYYY/MM/DD. HH:MM:SS
+  return d.toLocaleString('en-ZA').replace(',', '.');
+};
+
 const generateMockData = () => {
   const batches: Batch[] = [];
   const movements: BatchMovement[] = [];

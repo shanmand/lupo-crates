@@ -199,6 +199,24 @@ CREATE TABLE public.asset_losses (
     timestamp TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE public.role_permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role_name TEXT NOT NULL,
+    permission TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(role_name, permission)
+);
+
+-- Initial permissions for roles
+INSERT INTO public.role_permissions (role_name, permission) VALUES
+('System Administrator', 'MANAGE_USERS'),
+('System Administrator', 'MANAGE_FEES'),
+('System Administrator', 'WRITE_MOVEMENTS'),
+('System Administrator', 'VIEW_REPORTS'),
+('Crates Manager', 'WRITE_MOVEMENTS'),
+('Crates Manager', 'VIEW_REPORTS'),
+('Executive', 'VIEW_REPORTS');
+
 CREATE TABLE public.users (
     id UUID PRIMARY KEY,
     full_name TEXT,

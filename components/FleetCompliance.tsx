@@ -25,6 +25,7 @@ import { supabase, isSupabaseConfigured, getSignedFleetDocumentUrl } from '../su
 import { Truck, Driver, Branch, TruckRoadworthyHistory, UserRole, FleetReadiness } from '../types';
 import BranchSelector from './BranchSelector';
 import { useUser } from '../UserContext';
+import { formatCurrency } from '../constants';
 
 const FleetCompliance: React.FC = () => {
   const { profile } = useUser();
@@ -454,7 +455,7 @@ const FleetCompliance: React.FC = () => {
             <div className="flex items-center gap-6">
               <div className="text-right">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">YTD Compliance Cost</p>
-                <p className="text-xl font-black text-slate-900">R {trucks.find(t => t.truck_id === selectedTruckId)?.ytd_roadworthy_costs.toLocaleString() || '0'}</p>
+                <p className="text-xl font-black text-slate-900">{formatCurrency(trucks.find(t => t.truck_id === selectedTruckId)?.ytd_roadworthy_costs || 0)}</p>
               </div>
               <div className="flex gap-3">
                 <button 

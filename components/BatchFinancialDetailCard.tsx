@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Batch, AssetMaster, FeeSchedule, Location, Branch, User, AllSource } from '../types';
+import { formatCurrency } from '../constants';
 
 interface BatchFinancialDetailCardProps {
   batchId: string;
@@ -186,12 +187,6 @@ const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ bat
   const endDate = isConfirmed ? new Date(batch.confirmation_date!) : new Date();
   const durationDays = Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
 
-  const formatCurrency = (val: number | string | undefined | null) => {
-    const num = Number(val);
-    if (isNaN(num)) return '0.00';
-    return num.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden group transition-all hover:border-slate-300">
       {/* Header Section */}
@@ -217,7 +212,7 @@ const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ bat
           <div className="space-y-1">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Accrued Liability</p>
             <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-black text-slate-900 tracking-tighter">R {formatCurrency(accrual)}</span>
+              <span className="text-5xl font-black text-slate-900 tracking-tighter">{formatCurrency(accrual)}</span>
               {isRefreshing && <Loader2 className="animate-spin text-slate-300" size={20} />}
             </div>
           </div>
@@ -250,7 +245,7 @@ const BatchFinancialDetailCard: React.FC<BatchFinancialDetailCardProps> = ({ bat
           <BreakdownItem 
             icon={<Zap size={14} className="text-emerald-500" />} 
             label="Daily Rate" 
-            value={`R ${dailyRate.toFixed(2)}`} 
+            value={formatCurrency(dailyRate)} 
           />
         </div>
 

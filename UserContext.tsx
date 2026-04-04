@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from './supabase';
-import { UserRole, User } from './types';
+import { UserRole, User, RolePermission } from './types';
 
 interface UserProfile {
   id: string;
@@ -14,6 +14,7 @@ interface UserProfile {
 interface UserContextType {
   user: any;
   profile: UserProfile | null;
+  permissions: string[];
   isLoading: boolean;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -25,11 +26,29 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshProfile = async () => {
     if (user?.id) {
       await fetchProfile(user.id);
+    }
+  };
+
+  const fetchPermissions = async (roleName: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('role_permissions')
+        .select('permission')
+        .eq('role_name', roleName);
+      
+      if (error) throw error;
+      if (data) {
+        setPermissions(data.map((p: any) => p.permission));
+      }
+    } catch (err) {
+      console.error("Error fetching permissions:", err);
+      setPermissions([]);
     }
   };
 
@@ -57,6 +76,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           home_branch_name: 'Kya Sands',
           email: user?.email || ''
         });
+        await fetchPermissions(UserRole.STAFF);
         return;
       }
 
@@ -70,6 +90,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       };
 
       setProfile(profileData);
+      await fetchPermissions(profileData.role_name);
     } catch (err) {
       console.error("Profile Fetch Error (User likely not in DB yet):", err);
       setProfile({
@@ -79,6 +100,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         home_branch_name: 'Kya Sands',
         email: user?.email || ''
       });
+      await fetchPermissions(UserRole.STAFF);
     } finally {
       setIsLoading(false);
     }
@@ -103,6 +125,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         fetchProfile(session.user.id);
       } else {
         setProfile(null);
+        setPermissions([]);
         setIsLoading(false);
       }
     });
@@ -120,18 +143,11 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Admin has all permissions
     if (profile.role_name === UserRole.ADMIN) return true;
 
-    const role = profile.role_name;
-    if (role === UserRole.EXECUTIVE) {
-      return ['VIEW_DASHBOARD', 'VIEW_SETTLEMENT'].includes(permission);
-    }
-    if (role === UserRole.STAFF) {
-      return ['WRITE_MOVEMENTS', 'MANAGE_LOSSES', 'VIEW_DASHBOARD'].includes(permission);
-    }
-    return true;
+    return permissions.includes(permission);
   };
 
   return (
-    <UserContext.Provider value={{ user, profile, isLoading, logout, refreshProfile, hasPermission }}>
+    <UserContext.Provider value={{ user, profile, permissions, isLoading, logout, refreshProfile, hasPermission }}>
       {children}
     </UserContext.Provider>
   );

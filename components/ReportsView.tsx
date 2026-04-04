@@ -19,7 +19,7 @@ import {
   History as HistoryIcon
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
-import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_MOVEMENTS, MOCK_TRUCKS, MOCK_DRIVERS } from '../constants';
+import { MOCK_BATCHES, MOCK_LOCATIONS, MOCK_ASSETS, MOCK_MOVEMENTS, MOCK_TRUCKS, MOCK_DRIVERS, formatNumber, formatDateTime } from '../constants';
 import { Batch, Location, AssetMaster, Branch, PartnerType, LocationType, LogisticsTrace, Trip, TripStop, Driver, Truck as TruckType } from '../types';
 
 const ReportsView: React.FC = () => {
@@ -410,7 +410,7 @@ const ReportsView: React.FC = () => {
           <body>
             <div class="header">
               <h1>${title}</h1>
-              <p>${levelTitle} - Generated on ${new Date().toLocaleString()}</p>
+              <p>${levelTitle} - Generated on ${formatDateTime(new Date())}</p>
             </div>
             ${contentHtml || '<p style="text-align: center; color: #64748b; margin-top: 40px;">No trip data found for the selected period.</p>'}
           </body>
@@ -462,7 +462,7 @@ const ReportsView: React.FC = () => {
             <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Package size={20} /></div>
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Assets Tracked</h4>
           </div>
-          <p className="text-3xl font-black text-slate-900">{stats.totalUnits.toLocaleString()}</p>
+          <p className="text-3xl font-black text-slate-900">{formatNumber(stats.totalUnits)}</p>
           <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">Across {new Set(filteredData.map(b => b.current_location_id)).size} Locations</p>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -590,7 +590,7 @@ const ReportsView: React.FC = () => {
                 <div key={loc} className="space-y-2">
                   <div className="flex justify-between items-center text-xs font-bold">
                     <span className="text-slate-600">{loc}</span>
-                    <span className="text-slate-900">{(qty as number).toLocaleString()} Units</span>
+                    <span className="text-slate-900">{formatNumber(qty as number)} Units</span>
                   </div>
                   <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div 
@@ -641,7 +641,7 @@ const ReportsView: React.FC = () => {
                           <p className="text-xs font-bold text-slate-700">{loc?.name}</p>
                           <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{loc?.partner_type}</p>
                         </td>
-                        <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{(batch.quantity || 0).toLocaleString()}</td>
+                        <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{formatNumber(batch.quantity || 0)}</td>
                       </tr>
                     );
                   })}
@@ -684,16 +684,16 @@ const ReportsView: React.FC = () => {
                     <tr key={`trace-${locName}`} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 text-xs font-bold text-slate-900">{locName}</td>
                       <td className="px-6 py-4 text-center">
-                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black">{c.clean.toLocaleString()}</span>
+                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black">{formatNumber(c.clean)}</span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black">{c.dirty.toLocaleString()}</span>
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black">{formatNumber(c.dirty)}</span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-lg text-[10px] font-black">{c.damaged.toLocaleString()}</span>
+                        <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-lg text-[10px] font-black">{formatNumber(c.damaged)}</span>
                       </td>
                       <td className="px-6 py-4 text-right text-xs font-black text-slate-900">
-                        {(c.clean + c.dirty + c.damaged).toLocaleString()}
+                        {formatNumber(c.clean + c.dirty + c.damaged)}
                       </td>
                     </tr>
                   );

@@ -17,6 +17,7 @@ import {
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { BusinessDirectoryEntry } from '../types';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { formatNumber } from '../constants';
 
 const BusinessDirectory: React.FC = () => {
   const [partners, setPartners] = useState<BusinessDirectoryEntry[]>([]);
@@ -292,7 +293,7 @@ const BusinessDirectory: React.FC = () => {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <p className="text-sm font-black text-slate-800">{(partner.current_stock || 0).toLocaleString()}</p>
+                  <p className="text-sm font-black text-slate-800">{formatNumber(partner.current_stock || 0)}</p>
                   <p className="text-[10px] text-slate-400 uppercase font-bold">Units in System</p>
                 </td>
                 <td className="px-6 py-4 text-right">

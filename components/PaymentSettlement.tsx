@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Location, User, BusinessParty } from '../types';
+import { formatCurrency } from '../constants';
 
 interface PaymentSettlementProps {
   currentUser?: User;
@@ -154,8 +155,6 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
     document.body.removeChild(link);
   };
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -272,7 +271,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
                               </span>
                             </td>
                             <td className={`px-6 py-4 text-xs font-black text-right ${Number(r.amount_zar) < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                              R {formatCurrency(Number(r.amount_zar))}
+                              {formatCurrency(Number(r.amount_zar))}
                             </td>
                           </tr>
                         ))}
@@ -317,7 +316,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gross Total</label>
                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                      <p className="text-xl font-black text-slate-900">R {formatCurrency(grossLiability)}</p>
+                      <p className="text-xl font-black text-slate-900">{formatCurrency(grossLiability)}</p>
                     </div>
                   </div>
 
@@ -337,7 +336,7 @@ const PaymentSettlement: React.FC<PaymentSettlementProps> = ({ currentUser }) =>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Net Payable</label>
                     <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                      <p className="text-2xl font-black text-blue-900">R {formatCurrency(netPayable)}</p>
+                      <p className="text-2xl font-black text-blue-900">{formatCurrency(netPayable)}</p>
                     </div>
                   </div>
 

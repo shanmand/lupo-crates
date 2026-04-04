@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Search, Loader2, Package, Truck, User as UserIcon, MapPin, Calendar, ArrowLeft, ArrowRight } from 'lucide-react';
+import { formatCurrency } from '../constants';
 
 const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: string) => void }> = ({ selectedBranchId, onSelectBatch }) => {
   const [data, setData] = useState<any[]>([]);
@@ -113,8 +114,6 @@ const ForensicTable: React.FC<{ selectedBranchId?: string, onSelectBatch?: (id: 
     const date = new Date(item.transaction_date).toLocaleDateString('en-ZA');
     return `ON ${date}, ${item.driver_name || 'Unknown Driver'} moved ${item.quantity} crates to ${item.to_location_name || 'Destination'} using truck ${item.truck_plate || 'N/A'}`;
   };
-
-  const formatCurrency = (val: number) => val?.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00';
 
   return (
     <div className="space-y-6">

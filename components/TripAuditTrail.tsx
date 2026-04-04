@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Calendar, User, Truck, FileText, Printer, Loader2, Filter, ArrowRight, MapPin, Clock, Building2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { Branch, TripAuditTrail as TripAuditRecord } from '../types';
+import { formatDateTime } from '../constants';
 
 const TripAuditTrail: React.FC = () => {
   const [records, setRecords] = useState<TripAuditRecord[]>([]);
@@ -280,7 +281,7 @@ const TripAuditTrail: React.FC = () => {
           </div>
           <div className="text-right">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Printed On</p>
-            <p className="text-sm font-bold text-slate-900">{new Date().toLocaleString()}</p>
+            <p className="text-sm font-bold text-slate-900">{formatDateTime(new Date())}</p>
           </div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-8">

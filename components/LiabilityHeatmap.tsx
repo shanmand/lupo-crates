@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Branch } from '../types';
+import { formatCurrency } from '../constants';
 
 interface DailyBurnRecord {
   branch_name: string;
@@ -130,8 +131,6 @@ const LiabilityHeatmap: React.FC = () => {
     return 'text-emerald-600';
   };
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[400px] bg-white rounded-3xl border border-slate-200">
@@ -180,7 +179,7 @@ const LiabilityHeatmap: React.FC = () => {
           </div>
           <div className="relative z-10 space-y-2">
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Daily Burn</p>
-            <p className="text-5xl font-black tracking-tighter">R {formatCurrency(totalDailyBurn)}</p>
+            <p className="text-5xl font-black tracking-tighter">{formatCurrency(totalDailyBurn)}</p>
             <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest flex items-center gap-2">
               <Zap size={12} /> Accruing every 24 hours
             </p>
@@ -238,7 +237,7 @@ const LiabilityHeatmap: React.FC = () => {
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{record.batch_count} Active Batches</p>
                     </div>
                     <div className="text-right">
-                      <p className={`text-lg font-black ${getHeatText(record.daily_burn_rate)}`}>R {formatCurrency(record.daily_burn_rate)}</p>
+                      <p className={`text-lg font-black ${getHeatText(record.daily_burn_rate)}`}>{formatCurrency(record.daily_burn_rate)}</p>
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Per Day</p>
                     </div>
                   </div>

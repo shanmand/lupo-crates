@@ -31,6 +31,7 @@ import { format, isWithinInterval, parseISO, startOfMonth, endOfMonth } from 'da
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured, getSignedFleetDocumentUrl } from '../supabase';
 import { FleetExpense, TruckRoadworthyHistory, Branch, FleetReadiness } from '../types';
+import { formatCurrency } from '../constants';
 
 const FleetExpenseReport: React.FC = () => {
   const [expenses, setExpenses] = useState<FleetExpense[]>([]);
@@ -296,7 +297,7 @@ const FleetExpenseReport: React.FC = () => {
             <DollarSign size={80} />
           </div>
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total Fleet Spend</p>
-          <h3 className="text-4xl font-black tracking-tight">R {stats.totalSpend.toLocaleString()}</h3>
+          <h3 className="text-4xl font-black tracking-tight">{formatCurrency(stats.totalSpend)}</h3>
           <div className="mt-6 flex items-center gap-2 text-emerald-400 text-xs font-black">
             <ArrowUpRight size={14} />
             <span>PERIOD TOTAL</span>
@@ -312,7 +313,7 @@ const FleetExpenseReport: React.FC = () => {
           </div>
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Highest Spending Branch</p>
           <h3 className="text-3xl font-black text-slate-900 tracking-tight uppercase">{stats.highestBranch.name}</h3>
-          <p className="mt-2 text-slate-400 font-bold text-sm">R {stats.highestBranch.total.toLocaleString()}</p>
+          <p className="mt-2 text-slate-400 font-bold text-sm">{formatCurrency(stats.highestBranch.total)}</p>
           <div className="mt-4 flex items-center gap-2 text-rose-500 text-xs font-black">
             <TrendingUp size={14} />
             <span>COST CENTER PEAK</span>
@@ -437,13 +438,13 @@ const FleetExpenseReport: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-8 py-4 text-right">
-                      <span className="text-xs font-black text-slate-900">R {truck.license_cost.toLocaleString()}</span>
+                      <span className="text-xs font-black text-slate-900">{formatCurrency(truck.license_cost)}</span>
                     </td>
                     <td className="px-8 py-4 text-right">
-                      <span className="text-xs font-black text-slate-900">R {truck.cof_cost.toLocaleString()}</span>
+                      <span className="text-xs font-black text-slate-900">{formatCurrency(truck.cof_cost)}</span>
                     </td>
                     <td className="px-8 py-4 text-right">
-                      <span className="text-sm font-black text-slate-900">R {truck.total.toLocaleString()}</span>
+                      <span className="text-sm font-black text-slate-900">{formatCurrency(truck.total)}</span>
                     </td>
                     <td className="px-8 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
@@ -530,9 +531,9 @@ const FleetExpenseReport: React.FC = () => {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-black text-slate-900">R {( (history.test_fee_zar || 0) + (history.repair_costs_zar || 0) ).toLocaleString()}</p>
+                          <p className="font-black text-slate-900">{formatCurrency((history.test_fee_zar || 0) + (history.repair_costs_zar || 0))}</p>
                           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                            Fee: R {history.test_fee_zar?.toLocaleString()} • Repairs: R {history.repair_costs_zar?.toLocaleString()}
+                            Fee: {formatCurrency(history.test_fee_zar)} • Repairs: {formatCurrency(history.repair_costs_zar)}
                           </p>
                         </div>
                       </div>

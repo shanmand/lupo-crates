@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { supabase, fetchAllSources } from '../supabase';
 import { format, startOfWeek, subDays, isWithinInterval, parseISO } from 'date-fns';
+import { formatNumber } from '../constants';
 
 interface IntakeSummary {
   week_starting: string;
@@ -211,7 +212,7 @@ const BatchSummaryReport: React.FC = () => {
             <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase tracking-widest">Total Volume</span>
           </div>
           <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Total Intakes</h4>
-          <p className="text-3xl font-black text-slate-900 mt-1">{stats.totalIntakes.toLocaleString()}</p>
+          <p className="text-3xl font-black text-slate-900 mt-1">{formatNumber(stats.totalIntakes)}</p>
           <p className="text-[10px] text-slate-400 font-bold mt-2 uppercase tracking-tighter">Crates received in period</p>
         </div>
 
@@ -324,7 +325,7 @@ const BatchSummaryReport: React.FC = () => {
                         {item.source_type}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{(item.total_quantity || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{formatNumber(item.total_quantity || 0)}</td>
                   </tr>
                 ))}
                 {filteredData.length === 0 && (

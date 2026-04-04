@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Award, TrendingDown, Clock, ShieldAlert, User as UserIcon, MapPin, Calculator, ArrowRight, Info, AlertTriangle, TrendingUp, Search, Loader2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { ExecutiveReportRow } from '../types';
+import { formatCurrency, formatNumber } from '../constants';
 
 interface ExecutiveReportProps {
   onNavigate?: (tab: string) => void;
@@ -144,8 +145,6 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
     fetchData();
   }, [reportPeriod]);
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   const handleGenerateForecast = () => {
     setIsGeneratingForecast(true);
     // Simulate generation process
@@ -217,7 +216,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
                         <span className="text-2xl font-black text-slate-300">#0{index + 1}</span>
                       </div>
                       <h4 className="text-xl font-bold text-slate-800">{bp.branch_name}</h4>
-                      <p className="text-xs text-slate-400 font-medium">{(bp.total_units || 0).toLocaleString()} Assets Managed</p>
+                      <p className="text-xs text-slate-400 font-medium">{formatNumber(bp.total_units || 0)} Assets Managed</p>
                    </div>
                    <div className="mt-8">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">Primary Risk Factor</p>
@@ -253,7 +252,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
                         <Calculator size={14} />
                         <p className="text-[10px] font-bold uppercase tracking-widest">Drainage</p>
                       </div>
-                      <p className="text-2xl font-black text-rose-700">R {formatCurrency(bp.financial_drainage || 0)}</p>
+                      <p className="text-2xl font-black text-rose-700">{formatCurrency(bp.financial_drainage || 0)}</p>
                       <p className="text-[10px] text-slate-400 font-medium">Accrued sitting fees</p>
                    </div>
                 </div>
@@ -303,7 +302,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ onNavigate }) => {
               <h4 className="text-lg font-bold">Executive Insight: Reducing Drainage</h4>
               <p className="text-sm text-emerald-100 leading-relaxed mt-1">
                 Currently, <strong>{topDrainBranch.branch_name}</strong> is responsible for {(((topDrainBranch.financial_drainage || 0) / (totalDrainage || 1)) * 100).toFixed(0)}% of global financial drainage due to assets sitting idle for over 21 days. A 10% reduction in stagnation time across the fleet would result in a monthly 
-                saving of approximately <strong>R {formatCurrency(potentialSavings)}</strong> in unbilled daily rental fees.
+                saving of approximately <strong>{formatCurrency(potentialSavings)}</strong> in unbilled daily rental fees.
               </p>
            </div>
            <button 

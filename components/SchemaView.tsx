@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Database, Table as TableIcon, Calculator, ShieldCheck, Zap, Receipt, Lock, Globe, History as HistoryIcon, MapPin, Truck, FileText, AlertTriangle, TrendingUp, Info, CheckCircle2, Terminal } from 'lucide-react';
+import { formatCurrency } from '../constants';
 
 const SchemaView: React.FC = () => {
   const [activeView, setActiveView] = useState<'visual' | 'sql' | 'python' | 'simulator' | 'postgres' | 'rbac' | 'backend' | 'scenario' | 'migrations'>('scenario');
@@ -782,7 +783,7 @@ VALUES (
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Net Liability</p>
-                    <div className="text-5xl font-black text-slate-900 tracking-tighter">R {calculateSimLiability().toLocaleString()}</div>
+                    <div className="text-5xl font-black text-slate-900 tracking-tighter">{formatCurrency(calculateSimLiability())}</div>
                   </div>
                   <div className="p-4 bg-emerald-50 rounded-2xl text-emerald-600">
                     <TrendingUp size={32} />

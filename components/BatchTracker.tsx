@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS } from '../constants';
+import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS, formatCurrency } from '../constants';
 import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History as HistoryIcon, Camera, UploadCloud, XCircle, User as UserIcon, ArrowLeft } from 'lucide-react';
 import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace, MovementCondition } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
@@ -176,7 +176,6 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
   };
 
   const applicableFee = getFeeForBatch();
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   if (isLoading) {
     return <div className="p-20 text-center font-bold text-slate-400 animate-pulse uppercase tracking-widest">Loading Batch Intelligence...</div>;

@@ -24,6 +24,7 @@ import { normalizePayload } from '../supabaseUtils';
 import BranchSelector from './BranchSelector';
 import { Task, User, Location } from '../types';
 import { useUser } from '../UserContext';
+import { formatDateTime } from '../constants';
 
 interface Personnel {
   id: string;
@@ -375,7 +376,7 @@ const TaskManagement: React.FC<TaskManagementProps> = ({ onStartStockTake }) => 
             <div className="space-y-3 pt-4 border-t border-slate-50">
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
                 <div className="flex items-center gap-2 text-slate-400">
-                  <Calendar size={14} /> Due: {new Date(task.due_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                  <Calendar size={14} /> Due: {formatDateTime(task.due_date)}
                 </div>
                 <div className={`flex items-center gap-1 ${
                   task.status === 'Completed' ? 'text-emerald-500' :

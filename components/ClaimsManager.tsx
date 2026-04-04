@@ -4,6 +4,7 @@ import { MOCK_CLAIMS, MOCK_BATCHES, MOCK_CLAIM_AUDITS } from '../constants';
 import { AlertCircle, Clock, CheckCircle2, History as HistoryIcon, User as UserIcon, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2, Truck as TruckIcon, Info } from 'lucide-react';
 import { ClaimStatus, Claim, Batch, ClaimAudit, Truck, Driver } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { formatCurrency, formatDateTime } from '../constants';
 
 interface ClaimsManagerProps {
   isManager: boolean;
@@ -177,8 +178,6 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
 
   const workflow: ClaimStatus[] = ['Lodged', 'Under Assessment', 'Returned for Assessment', 'Accepted', 'Rejected'];
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -203,7 +202,7 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Disputed Liability</p>
-            <p className="text-2xl font-bold text-amber-600">R {formatCurrency(claims.filter(c => c.status !== 'Accepted').reduce((acc, c) => acc + c.amount_claimed_zar, 0))}</p>
+            <p className="text-2xl font-bold text-amber-600">{formatCurrency(claims.filter(c => c.status !== 'Accepted').reduce((acc, c) => acc + c.amount_claimed_zar, 0))}</p>
             <p className="text-[10px] text-slate-400 font-medium">Still accruing fees</p>
           </div>
           <div className="p-3 bg-amber-100 text-amber-600 rounded-full">
@@ -213,7 +212,7 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Approved Credits</p>
-            <p className="text-2xl font-bold text-emerald-600">R {formatCurrency(claims.filter(c => c.status === 'Accepted').reduce((acc, c) => acc + c.amount_claimed_zar, 0))}</p>
+            <p className="text-2xl font-bold text-emerald-600">{formatCurrency(claims.filter(c => c.status === 'Accepted').reduce((acc, c) => acc + c.amount_claimed_zar, 0))}</p>
             <p className="text-[10px] text-slate-400 font-medium">Claims accepted by Supplier</p>
           </div>
           <div className="p-3 bg-emerald-100 text-emerald-600 rounded-full">
@@ -223,7 +222,7 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Net Supplier Balance</p>
-            <p className="text-2xl font-bold text-slate-800">R {formatCurrency(321400.00)}</p>
+            <p className="text-2xl font-bold text-slate-800">{formatCurrency(321400.00)}</p>
             <p className="text-[10px] text-slate-400 font-medium">Final payable amount</p>
           </div>
           <div className="p-3 bg-slate-100 text-slate-600 rounded-full">
@@ -285,7 +284,7 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
                     <td className="px-8 py-4 font-black text-slate-800">#{batch.batch_id}</td>
                     <td className="px-8 py-4 text-xs text-slate-600">{batch.current_location}</td>
                     <td className="px-8 py-4 text-xs font-black text-slate-800">{batch.quantity} Units</td>
-                    <td className="px-8 py-4 text-xs font-black text-amber-600">R {formatCurrency(batch.daily_accrued_liability)}</td>
+                    <td className="px-8 py-4 text-xs font-black text-amber-600">{formatCurrency(batch.daily_accrued_liability)}</td>
                     <td className="px-8 py-4 text-right">
                       <button 
                         onClick={() => handleResolveDispute(batch.batch_id)}
@@ -342,11 +341,11 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
               <div className="flex justify-between items-start mb-8">
                 <div>
                   <h3 className="text-xl font-bold text-slate-800">Workflow: {selectedClaim.id}</h3>
-                  <p className="text-sm text-slate-500">Lodged by Crates Dept on {new Date(selectedClaim.created_at).toLocaleString('en-ZA')}</p>
+                  <p className="text-sm text-slate-500">Lodged by Crates Dept on {formatDateTime(selectedClaim.created_at)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-bold text-slate-400 uppercase">Estimated Credit</p>
-                  <p className="text-2xl font-bold text-emerald-600">R {formatCurrency(selectedClaim.amount_claimed_zar)}</p>
+                  <p className="text-2xl font-bold text-emerald-600">{formatCurrency(selectedClaim.amount_claimed_zar)}</p>
                 </div>
               </div>
 
@@ -383,7 +382,7 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
                       <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-slate-300 ring-4 ring-white" />
                       <div className="flex justify-between items-start gap-4">
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">{new Date(log.timestamp).toLocaleString('en-ZA')}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">{formatDateTime(log.timestamp)}</p>
                           <p className="text-sm font-bold text-slate-800">
                             {log.status_from} &rarr; <span className="text-emerald-600">{log.status_to}</span>
                           </p>

@@ -15,7 +15,15 @@ export type Permission =
   | 'VERIFY_RECEIPTS'
   | 'MANAGE_LOSSES'
   | 'VIEW_DASHBOARD'
-  | 'VIEW_AUDIT_LOGS';
+  | 'VIEW_AUDIT_LOGS'
+  | 'VIEW_REPORTS';
+
+export interface RolePermission {
+  id: string;
+  role_name: string;
+  permission: Permission;
+  created_at?: string;
+}
 
 export enum LocationType {
   CRATES_DEPT = 'Crates Dept',

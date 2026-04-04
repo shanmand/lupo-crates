@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { AssetLoss, FeeType, LossType, Batch, FeeSchedule, AssetMaster, Location } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase';
+import { formatCurrency } from '../constants';
 import { 
   HandCoins, 
   Bell, 
@@ -19,7 +21,6 @@ import {
   Trash2,
   Loader2
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
 
 const SupplierRecon: React.FC = () => {
   const [losses, setLosses] = useState<AssetLoss[]>([]);
@@ -101,8 +102,6 @@ const SupplierRecon: React.FC = () => {
     return baseAmount;
   };
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   const filteredLosses = losses.filter(l => {
     const matchesFilter = filter === 'all' || 
                          (filter === 'notified' && l.supplier_notified) ||
@@ -135,7 +134,7 @@ const SupplierRecon: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-200">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Unbilled Settlement Exposure</p>
-          <p className="text-3xl font-bold">R {formatCurrency(totalUnbilledLossValue)}</p>
+          <p className="text-3xl font-bold">{formatCurrency(totalUnbilledLossValue)}</p>
           <div className="flex items-center gap-1 text-[10px] text-amber-400 font-bold mt-2 uppercase">
             <AlertTriangle size={12} /> After Scrapped/Salvage Credits
           </div>
@@ -144,7 +143,7 @@ const SupplierRecon: React.FC = () => {
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Rechargeable Value</p>
             <p className="text-2xl font-bold text-amber-600">
-               R {formatCurrency(totalRechargeableValue)}
+               {formatCurrency(totalRechargeableValue)}
             </p>
           </div>
           <CreditCard className="text-amber-500 opacity-20" size={40} />
@@ -252,7 +251,7 @@ const SupplierRecon: React.FC = () => {
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="space-y-0.5">
-                        <p className="text-sm font-black text-slate-800">R {formatCurrency(settlement)}</p>
+                        <p className="text-sm font-black text-slate-800">{formatCurrency(settlement)}</p>
                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
                             {loss.loss_type === LossType.SCRAPPED ? 'Salvage Rate Applied' : `Rate: R ${fee?.amount_zar.toFixed(2)}`}
                         </p>

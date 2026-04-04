@@ -37,6 +37,7 @@ import {
 import { format, differenceInDays, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Truck as TruckType, Driver, Branch, Task, ManagementKPIs, LocationUnconfirmedValue, BatchAccrual, BranchFleetExpense } from '../types';
+import { formatCurrency } from '../constants';
 
 const ManagementReportPack: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -286,14 +287,14 @@ const ManagementReportPack: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Revenue (Est)</p>
-            <h4 className="text-3xl font-black text-slate-900 tracking-tight">R {reportStats.totalRevenue.toLocaleString()}</h4>
+            <h4 className="text-3xl font-black text-slate-900 tracking-tight">{formatCurrency(reportStats.totalRevenue)}</h4>
             <div className="mt-4 flex items-center gap-2 text-emerald-500 text-xs font-black">
               <ArrowUpRight size={14} /> 12.5% vs Last Month
             </div>
           </div>
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Accrued Liability</p>
-            <h4 className="text-3xl font-black text-slate-900 tracking-tight">R {reportStats.totalAccrued.toLocaleString()}</h4>
+            <h4 className="text-3xl font-black text-slate-900 tracking-tight">{formatCurrency(reportStats.totalAccrued)}</h4>
             <div className="mt-4 flex items-center gap-2 text-slate-400 text-xs font-black">
               <Clock size={14} /> Current Accrual
             </div>
@@ -360,28 +361,28 @@ const ManagementReportPack: React.FC = () => {
               <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Truck Licensing</p>
-                  <p className="font-black text-slate-900">R {reportStats.licensingCost.toLocaleString()}</p>
+                  <p className="font-black text-slate-900">{formatCurrency(reportStats.licensingCost)}</p>
                 </div>
                 <Truck size={24} className="text-slate-200" />
               </div>
               <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COF Repairs</p>
-                  <p className="font-black text-slate-900">R {reportStats.cofCost.toLocaleString()}</p>
+                  <p className="font-black text-slate-900">{formatCurrency(reportStats.cofCost)}</p>
                 </div>
                 <ShieldAlert size={24} className="text-slate-200" />
               </div>
               <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Other Compliance</p>
-                  <p className="font-black text-slate-900">R {reportStats.otherCost.toLocaleString()}</p>
+                  <p className="font-black text-slate-900">{formatCurrency(reportStats.otherCost)}</p>
                 </div>
                 <UserIcon size={24} className="text-slate-200" />
               </div>
             </div>
             <div className="pt-6 border-t border-slate-100">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Compliance Spend</p>
-              <p className="text-3xl font-black text-slate-900">R {reportStats.complianceCost.toLocaleString()}</p>
+              <p className="text-3xl font-black text-slate-900">{formatCurrency(reportStats.complianceCost)}</p>
             </div>
           </div>
         </div>

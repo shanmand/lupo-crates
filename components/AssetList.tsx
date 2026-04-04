@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Package, Plus, Search, Filter, Loader2, CheckCircle2, AlertCircle, Trash2, Edit2, Database, Shield, CreditCard, History } from 'lucide-react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { AssetMaster, User } from '../types';
+import { formatNumber } from '../constants';
 
 interface AssetListProps {
   currentUser: User;
@@ -205,7 +206,7 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm font-black text-slate-900">{item.quantity.toLocaleString()}</span>
+                        <span className="text-sm font-black text-slate-900">{formatNumber(item.quantity)}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">

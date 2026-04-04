@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { Location, Batch, AssetMaster, FeeSchedule, User, UserRole, Settlement } from '../types';
+import { formatCurrency } from '../constants';
 import { Receipt, DollarSign, Calendar, MapPin, Calculator, Loader2, CheckCircle2, AlertTriangle, TrendingUp, Info, Download, Trash2, History as HistoryIcon } from 'lucide-react';
 
 interface SettlementModuleProps {
@@ -134,8 +135,6 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
     }
   };
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   if (isLoading && !selectedSupplier) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -243,7 +242,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
                                   {batch.liability_type}
                                 </span>
                               </td>
-                              <td className="py-4 text-xs font-black text-slate-900 text-right">R {formatCurrency(Number(batch.amount_zar))}</td>
+                              <td className="py-4 text-xs font-black text-slate-900 text-right">{formatCurrency(Number(batch.amount_zar))}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -255,7 +254,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                       <div className="space-y-1">
                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Gross Liability</p>
-                        <p className="text-2xl font-black">R {formatCurrency(totalGrossLiability)}</p>
+                        <p className="text-2xl font-black">{formatCurrency(totalGrossLiability)}</p>
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Discount (ZAR)</label>
@@ -268,7 +267,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
                       </div>
                       <div className="space-y-1 text-right">
                         <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Net Payable</p>
-                        <p className="text-4xl font-black text-emerald-400">R {formatCurrency(netPayable)}</p>
+                        <p className="text-4xl font-black text-emerald-400">{formatCurrency(netPayable)}</p>
                       </div>
                     </div>
 
@@ -335,7 +334,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
                         <p className="text-xs font-black text-slate-900">{supplier?.name || 'Unknown'}</p>
                         <p className="text-[9px] text-slate-400 font-bold uppercase">{s.created_at.split('T')[0]}</p>
                       </div>
-                      <p className="text-sm font-black text-emerald-600">R {formatCurrency(s.net_payable)}</p>
+                      <p className="text-sm font-black text-emerald-600">{formatCurrency(s.net_payable)}</p>
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-slate-200/50">
                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ref: {s.id.split('-')[0]}</span>

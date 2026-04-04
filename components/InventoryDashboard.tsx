@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Package, MapPin, TrendingUp, AlertCircle, Plus, Search, Loader2, CheckCircle2, ArrowRight, History, Download } from 'lucide-react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
 import { User, AssetMaster, Location } from '../types';
+import { formatNumber } from '../constants';
 
 interface InventoryDashboardProps {
   currentUser: User;
@@ -225,7 +226,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
             </div>
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Assets</p>
-              <p className="text-xl font-black text-slate-900">{totalUnits.toLocaleString()}</p>
+              <p className="text-xl font-black text-slate-900">{formatNumber(totalUnits)}</p>
             </div>
           </div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -234,7 +235,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
             </div>
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Batches</p>
-              <p className="text-xl font-black text-slate-900">{totalBatches.toLocaleString()}</p>
+              <p className="text-xl font-black text-slate-900">{formatNumber(totalBatches)}</p>
             </div>
           </div>
           <button 
@@ -278,7 +279,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-black text-slate-900">{item.total_quantity.toLocaleString()}</p>
+                <p className="text-2xl font-black text-slate-900">{formatNumber(item.total_quantity)}</p>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Units</p>
               </div>
             </div>
@@ -348,7 +349,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
                     </div>
                   </td>
                   <td className="px-8 py-4 text-right">
-                    <span className="text-sm font-black text-slate-900">{intake.quantity.toLocaleString()}</span>
+                    <span className="text-sm font-black text-slate-900">{formatNumber(intake.quantity)}</span>
                   </td>
                   <td className="px-8 py-4 text-right">
                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

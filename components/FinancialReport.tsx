@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { LocationType, LocationCategory, Batch, Location, FeeSchedule, ThaanSlip, AssetMaster, AssetLoss, Branch } from '../types';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
+import { formatCurrency, formatNumber } from '../constants';
 
 interface FinancialReportProps {
   branchContext?: 'Kya Sands' | 'Durban' | 'Consolidated';
@@ -167,8 +168,6 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
     return batches.filter(batch => (batch as any).branch_id === selectedBranchId);
   }, [batches, selectedBranchId]);
 
-  const formatCurrency = (val: number) => val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   const branchAccruedRental = useMemo(() => {
     return branchBatches.reduce((total, batch) => {
       const asset = assets.find(a => a.id === batch.asset_id);
@@ -273,10 +272,10 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <KPICard title="Assets in Custody" value={totalAssetsInCustody.toLocaleString()} desc="Total Held" status="info" icon={<Package size={24} />} />
-        <KPICard title="Accrued Rental" value={`R ${formatCurrency(branchAccruedRental)}`} desc="Possession Exposure" status="danger" icon={<Calculator size={24} />} />
-        <KPICard title="Issue Fees" value={`R ${formatCurrency(branchUncreditedIssueFees)}`} desc="Outstanding PODs" status="warning" icon={<TrendingUp size={24} />} />
-        <KPICard title="Monthly Losses" value={`R ${formatCurrency(monthlyLossValue)}`} desc="Assets Written Off" status="critical" icon={<Skull size={24} />} />
+        <KPICard title="Assets in Custody" value={formatNumber(totalAssetsInCustody)} desc="Total Held" status="info" icon={<Package size={24} />} />
+        <KPICard title="Accrued Rental" value={formatCurrency(branchAccruedRental)} desc="Possession Exposure" status="danger" icon={<Calculator size={24} />} />
+        <KPICard title="Issue Fees" value={formatCurrency(branchUncreditedIssueFees)} desc="Outstanding PODs" status="warning" icon={<TrendingUp size={24} />} />
+        <KPICard title="Monthly Losses" value={formatCurrency(monthlyLossValue)} desc="Assets Written Off" status="critical" icon={<Skull size={24} />} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -326,7 +325,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
                     <div className="p-6 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex items-center justify-between animate-in zoom-in-95 duration-300">
                        <div className="space-y-1">
                           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Engine Result</p>
-                          <p className="text-4xl font-black text-white tracking-tighter">R {formatCurrency(rpcResult)}</p>
+                          <p className="text-4xl font-black text-white tracking-tighter">{formatCurrency(rpcResult)}</p>
                        </div>
                        <div className="flex flex-col items-end gap-2 text-emerald-400">
                           <CheckCircle2 size={32} />
@@ -374,7 +373,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
                                   </td>
                                   <td className="py-4"><span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">{b.status}</span></td>
                                   <td className="py-4"><span className={`font-bold ${age > 60 ? 'text-rose-600' : 'text-slate-600'}`}>{age} Days</span></td>
-                                  <td className="py-4 text-right font-bold text-slate-800">R {formatCurrency(cost)}</td>
+                                  <td className="py-4 text-right font-bold text-slate-800">{formatCurrency(cost)}</td>
                                </tr>
                              );
                            })}
@@ -435,7 +434,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
               {auditResult !== null && (
                 <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl animate-in slide-in-from-top duration-300">
                   <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Total Site Liability</p>
-                  <p className="text-2xl font-black text-emerald-900">R {formatCurrency(auditResult)}</p>
+                  <p className="text-2xl font-black text-emerald-900">{formatCurrency(auditResult)}</p>
                 </div>
               )}
             </div>
@@ -452,7 +451,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ branchContext }) => {
                     <p className="text-xs font-bold text-slate-800">{locName}</p>
                     <p className="text-[10px] text-slate-400 uppercase font-bold">Units</p>
                   </div>
-                  <p className="text-sm font-black text-slate-800">{qty.toLocaleString()}</p>
+                  <p className="text-sm font-black text-slate-800">{formatNumber(qty)}</p>
                 </div>
               ))}
             </div>
