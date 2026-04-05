@@ -69,14 +69,9 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (error) {
         console.warn("UserContext: Profile Fetch Error (User likely not in DB yet):", error);
-        setProfile({
-          id: userId,
-          full_name: "Guest User",
-          role_name: UserRole.STAFF,
-          home_branch_name: 'Kya Sands',
-          email: user?.email || ''
-        });
-        await fetchPermissions(UserRole.STAFF);
+        setProfile(null);
+        setPermissions([]);
+        setIsLoading(false);
         return;
       }
 
@@ -93,14 +88,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await fetchPermissions(profileData.role_name);
     } catch (err) {
       console.error("Profile Fetch Error (User likely not in DB yet):", err);
-      setProfile({
-        id: userId,
-        full_name: "Guest User",
-        role_name: UserRole.STAFF,
-        home_branch_name: 'Kya Sands',
-        email: user?.email || ''
-      });
-      await fetchPermissions(UserRole.STAFF);
+      setProfile(null);
+      setPermissions([]);
     } finally {
       setIsLoading(false);
     }

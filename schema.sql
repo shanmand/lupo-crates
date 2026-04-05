@@ -195,6 +195,7 @@ CREATE TABLE public.asset_losses (
     location_id TEXT, -- Can be from locations or business_parties
     reported_by UUID,
     notes TEXT,
+    is_settled BOOLEAN DEFAULT FALSE,
     transaction_date DATE DEFAULT CURRENT_DATE,
     timestamp TIMESTAMPTZ DEFAULT NOW()
 );
@@ -310,6 +311,7 @@ CREATE TABLE public.claims (
     type TEXT NOT NULL, -- Damaged, Dirty, Missing
     amount_claimed_zar NUMERIC(12, 2),
     status TEXT DEFAULT 'Lodged', -- Lodged, Investigating, Settled, Rejected
+    is_settled BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

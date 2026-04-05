@@ -813,8 +813,9 @@ JOIN public.asset_master am ON b.asset_id = am.id;
 -- 24. Settlement Module Enhancements
 -- ==================================
 
--- Add is_settled to claims
+-- Add is_settled to claims and asset_losses
 ALTER TABLE public.claims ADD COLUMN IF NOT EXISTS is_settled BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.asset_losses ADD COLUMN IF NOT EXISTS is_settled BOOLEAN DEFAULT FALSE;
 
 -- Create settlements table
 CREATE TABLE IF NOT EXISTS public.settlements (

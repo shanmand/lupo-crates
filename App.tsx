@@ -73,6 +73,8 @@ import DriverPortal from './components/DriverPortal';
 import ManagementReportPack from './components/ManagementReportPack';
 import BatchSummaryReport from './components/BatchSummaryReport';
 import TripManagement from './components/TripManagement';
+import Login from './components/Login';
+import Unauthorized from './components/Unauthorized';
 import { useBranches } from './useBranches';
 import { UserRole, Branch } from './types';
 import { supabase } from './supabase';
@@ -124,6 +126,16 @@ const AppContent: React.FC = () => {
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('Consolidated');
   const [preselectedStockTakeLocation, setPreselectedStockTakeLocation] = useState<string | undefined>(undefined);
   const [pendingAssignment, setPendingAssignment] = useState<{customerId: string, assetId: string, quantity: number, requestId: string} | null>(null);
+  
+  // 1. Check if user is authenticated
+  if (!user && !isUserLoading) {
+    return <Login />;
+  }
+
+  // 2. Check if user is authorized (has a profile in our users table)
+  if (user && !profile && !isUserLoading) {
+    return <Unauthorized />;
+  }
 
   const currentBranchContext = profile?.role_name === UserRole.MANAGER 
     ? (profile.home_branch_name.includes('JHB') ? 'Kya Sands' : 'Durban') 
