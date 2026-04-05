@@ -81,18 +81,53 @@ const LossRecorder: React.FC<LossRecorderProps> = ({ currentUser }) => {
 
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('process_asset_loss', {
-        p_batch_id: lossForm.batch_id,
-        p_lost_quantity: lossForm.lost_quantity,
-        p_loss_type: lossForm.loss_type,
-        p_location_id: lossForm.location_id,
-        p_reported_by: currentUser.id,
-        p_notes: lossForm.notes
-      });
+      // Client-side logic for process_asset_loss
+      const { data: batch, error: fetchError } = await supabase
+        .from('batches')
+        .select('quantity')
+        .eq('id', lossForm.batch_id)
+        .single();
 
-      if (error) throw error;
+      if (fetchError || !batch) throw new Error('Batch not found');
+      if (batch.quantity < lossForm.lost_quantity) throw new Error('Insufficient quantity in batch');
 
-      setNotification({ message: `Loss recorded successfully. ID: ${data}`, type: 'success' });
+      // 1. Record the loss
+      const { data: lossData, error: lossError } = await supabase
+        .from('asset_losses')
+        .insert([{
+          batch_id: lossForm.batch_id,
+          lost_quantity: lossForm.lost_quantity,
+          loss_type: lossForm.loss_type,
+          location_id: lossForm.location_id,
+          reported_by: currentUser.id,
+          notes: lossForm.notes,
+          timestamp: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (lossError) throw lossError;
+
+      // 2. Update batch quantity
+      const { error: updateError } = await supabase
+        .from('batches')
+        .update({ quantity: batch.quantity - lossForm.lost_quantity })
+        .eq('id', lossForm.batch_id);
+
+      if (updateError) throw updateError;
+
+      // 3. Record movement to 'LOSS' location
+      await supabase.from('batch_movements').insert([{
+        batch_id: lossForm.batch_id,
+        from_location_id: lossForm.location_id,
+        to_location_id: 'LOSS',
+        quantity: lossForm.lost_quantity,
+        transaction_date: new Date().toISOString().split('T')[0],
+        condition: 'Damaged',
+        notes: `Loss recorded: ${lossForm.loss_type}`
+      }]);
+
+      setNotification({ message: `Loss recorded successfully. ID: ${lossData.id}`, type: 'success' });
       setShowLossModal(false);
       setLossForm({ batch_id: '', lost_quantity: 0, loss_type: 'Missing', location_id: '', notes: '' });
       fetchData();

@@ -199,20 +199,32 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
 
           // Handle Partial Movement
           if (item.quantity < batch.quantity) {
-            // Use RPC to split the batch atomically
-            const { data: newBatchId, error: splitError } = await supabase.rpc('split_batch', normalizePayload({
-              original_batch_id: item.batchId,
-              move_qty: item.quantity,
-              new_location_id: destination,
-              move_date: movementDate
-            }));
-
-            if (splitError) throw splitError;
-            if (!newBatchId) throw new Error("Failed to generate new batch ID during split");
+            // Client-side split logic
+            const newBatchId = `${item.batchId}-S${Math.floor(Math.random() * 1000000)}`;
             
-            console.log("Split RPC Result:", newBatchId);
-            targetBatchId = castId(newBatchId);
-            console.log("Target Batch ID after cast:", targetBatchId);
+            // 1. Reduce original batch
+            const { error: reduceError } = await supabase
+              .from('batches')
+              .update({ quantity: batch.quantity - item.quantity })
+              .eq('id', item.batchId);
+            
+            if (reduceError) throw reduceError;
+
+            // 2. Create new batch
+            const { error: createError } = await supabase
+              .from('batches')
+              .insert([{
+                id: newBatchId,
+                asset_id: batch.asset_id,
+                quantity: item.quantity,
+                current_location_id: destination,
+                status: isDestInTransit ? 'In-Transit' : 'Success',
+                transaction_date: movementDate
+              }]);
+            
+            if (createError) throw createError;
+
+            targetBatchId = newBatchId;
           } else {
             // Full Movement
             const { error: updateError } = await supabase

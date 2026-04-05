@@ -58,12 +58,11 @@ export const formatCurrency = (val: number | string | null | undefined) => {
   const num = typeof val === 'string' ? parseFloat(val) : val;
   if (num === null || num === undefined || isNaN(num)) return 'R0.00';
   
-  // toFixed(2) always uses '.' as decimal separator
   const fixed = num.toFixed(2);
   const [integerPart, decimalPart] = fixed.split('.');
   
-  // Add comma as thousand separator
-  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  // Use space as thousand separator to avoid comma/dot confusion
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   
   return `R${formattedInteger}.${decimalPart}`;
 };
@@ -73,7 +72,7 @@ export const formatNumber = (val: number | string | null | undefined) => {
   if (num === null || num === undefined || isNaN(num)) return '0';
   
   const integerPart = Math.floor(num).toString();
-  return integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 };
 
 export const formatDateTime = (date: string | Date | null | undefined) => {

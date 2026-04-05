@@ -126,11 +126,14 @@ const BatchManagement: React.FC = () => {
     if (!editingBatch) return;
     setIsLoading(true);
     try {
-      const { error } = await supabase.rpc('update_inventory_batch', normalizePayload({
-        p_batch_id: editingBatch.id,
-        p_quantity: editForm.quantity,
-        p_date_received: editForm.transaction_date
-      }));
+      const { error } = await supabase
+        .from('batches')
+        .update({
+          quantity: editForm.quantity,
+          transaction_date: editForm.transaction_date
+        })
+        .eq('id', editingBatch.id);
+
       if (error) throw error;
       setNotification({ msg: `Batch ${editingBatch.id} updated`, type: 'success' });
       setEditingBatch(null);
@@ -147,10 +150,15 @@ const BatchManagement: React.FC = () => {
     if (!confirm(`Are you sure you want to delete batch ${id}? This action cannot be undone.`)) return;
     setIsLoading(true);
     try {
-      const { error } = await supabase.rpc('delete_inventory_batch', normalizePayload({
-        p_batch_id: id
-      }));
+      // Delete related records sequentially
+      await supabase.from('batch_movements').delete().eq('batch_id', id);
+      await supabase.from('asset_losses').delete().eq('batch_id', id);
+      await supabase.from('claims').delete().eq('batch_id', id);
+      await supabase.from('thaan_slips').delete().eq('batch_id', id);
+
+      const { error } = await supabase.from('batches').delete().eq('id', id);
       if (error) throw error;
+      
       setNotification({ msg: `Batch ${id} deleted`, type: 'success' });
       fetchData();
     } catch (err: any) {

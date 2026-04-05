@@ -117,20 +117,70 @@ const StockTakeModule: React.FC<StockTakeModuleProps> = ({ currentUser }) => {
 
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('process_stock_take', {
-        p_location_id: selectedLocation,
-        p_performed_by: currentUser.id,
-        p_take_date: stockTakeDate,
-        p_counter_name: currentUser.name,
-        p_notes: notes,
-        p_status: hasVariances ? 'Pending Approval' : 'Approved',
-        p_items: items
-      });
+      // Client-side logic for process_stock_take
+      // 1. Record the stock take
+      const { data: stockTakeData, error: takeError } = await supabase
+        .from('stock_takes')
+        .insert([{
+          location_id: selectedLocation,
+          performed_by: currentUser.id,
+          take_date: stockTakeDate,
+          counter_name: currentUser.name,
+          notes: notes,
+          status: hasVariances ? 'Pending Approval' : 'Approved'
+        }])
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (takeError) throw takeError;
+      const v_stock_take_id = stockTakeData.id;
+
+      // 2. Process each item
+      for (const item of items) {
+        const batch = batches.find(b => b.id === item.batch_id);
+        if (!batch) continue;
+
+        const v_system_qty = batch.quantity;
+        const v_variance = item.physical_count - v_system_qty;
+
+        // Record item
+        const { error: itemError } = await supabase
+          .from('stock_take_items')
+          .insert([{
+            stock_take_id: v_stock_take_id,
+            batch_id: item.batch_id,
+            system_quantity: v_system_qty,
+            physical_count: item.physical_count,
+            variance: v_variance,
+            comments: item.comments
+          }]);
+
+        if (itemError) throw itemError;
+
+        // If approved, update batch quantity immediately
+        if (!hasVariances && v_variance !== 0) {
+          const { error: updateError } = await supabase
+            .from('batches')
+            .update({ quantity: item.physical_count })
+            .eq('id', item.batch_id);
+
+          if (updateError) throw updateError;
+
+          // Record adjustment movement
+          await supabase.from('batch_movements').insert([{
+            batch_id: item.batch_id,
+            from_location_id: selectedLocation,
+            to_location_id: 'ADJUSTMENT',
+            quantity: v_variance,
+            transaction_date: stockTakeDate,
+            condition: 'Clean',
+            notes: `Stock take adjustment: ${item.comments}`
+          }]);
+        }
+      }
 
       setNotification({ 
-        message: hasVariances ? `Stock take submitted for approval. ID: ${data}` : `Stock take processed successfully.`, 
+        message: hasVariances ? `Stock take submitted for approval. ID: ${v_stock_take_id}` : `Stock take processed successfully.`, 
         type: 'success' 
       });
       

@@ -125,27 +125,67 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
     setIsSubmitting(true);
     try {
       if (editingIntake) {
-        const { error } = await supabase.rpc('update_inventory_intake', {
-          p_batch_id: editingIntake.batch_id,
-          p_asset_id: intakeForm.asset_id,
-          p_quantity: intakeForm.quantity,
-          p_location_id: intakeForm.location_id,
-          p_origin_id: intakeForm.origin_id,
-          p_notes: intakeForm.notes
-        });
-        if (error) throw error;
+        // Update batch
+        const { error: batchError } = await supabase
+          .from('batches')
+          .update({
+            asset_id: intakeForm.asset_id,
+            quantity: intakeForm.quantity,
+            current_location_id: intakeForm.location_id
+          })
+          .eq('id', editingIntake.batch_id);
+        
+        if (batchError) throw batchError;
+
+        // Update movement
+        const { error: moveError } = await supabase
+          .from('batch_movements')
+          .update({
+            from_location_id: intakeForm.origin_id,
+            to_location_id: intakeForm.location_id,
+            quantity: intakeForm.quantity,
+            notes: intakeForm.notes
+          })
+          .eq('batch_id', editingIntake.batch_id)
+          .eq('condition', 'New/Intake');
+        
+        if (moveError) throw moveError;
+
         setNotification({ message: 'Inventory intake updated successfully', type: 'success' });
       } else {
-        const { data, error } = await supabase.rpc('process_inventory_intake', {
-          p_asset_id: intakeForm.asset_id,
-          p_quantity: intakeForm.quantity,
-          p_location_id: intakeForm.location_id,
-          p_origin_id: intakeForm.origin_id,
-          p_notes: intakeForm.notes,
-          p_user_id: currentUser.id
-        });
-        if (error) throw error;
-        setNotification({ message: `Inventory intake successful. Batch ID: ${data}`, type: 'success' });
+        // Generate Batch ID
+        const batchId = `BAT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 1000000)}`;
+        
+        // Insert Batch
+        const { error: batchError } = await supabase
+          .from('batches')
+          .insert([{
+            id: batchId,
+            asset_id: intakeForm.asset_id,
+            quantity: intakeForm.quantity,
+            current_location_id: intakeForm.location_id,
+            status: 'Success',
+            transaction_date: new Date().toISOString().slice(0, 10)
+          }]);
+        
+        if (batchError) throw batchError;
+
+        // Insert Movement
+        const { error: moveError } = await supabase
+          .from('batch_movements')
+          .insert([{
+            batch_id: batchId,
+            from_location_id: intakeForm.origin_id || null,
+            to_location_id: intakeForm.location_id,
+            origin_user_id: currentUser.id,
+            quantity: intakeForm.quantity,
+            condition: 'New/Intake',
+            notes: intakeForm.notes
+          }]);
+        
+        if (moveError) throw moveError;
+
+        setNotification({ message: `Inventory intake successful. Batch ID: ${batchId}`, type: 'success' });
       }
 
       setShowIntakeModal(false);
@@ -164,8 +204,15 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
     if (!isSupabaseConfigured || !showDeleteConfirm) return;
 
     try {
-      const { error } = await supabase.rpc('delete_inventory_batch', { p_batch_id: showDeleteConfirm });
+      // Delete related records sequentially
+      await supabase.from('batch_movements').delete().eq('batch_id', showDeleteConfirm);
+      await supabase.from('asset_losses').delete().eq('batch_id', showDeleteConfirm);
+      await supabase.from('claims').delete().eq('batch_id', showDeleteConfirm);
+      await supabase.from('thaan_slips').delete().eq('batch_id', showDeleteConfirm);
+      
+      const { error } = await supabase.from('batches').delete().eq('id', showDeleteConfirm);
       if (error) throw error;
+
       setNotification({ message: 'Intake deleted successfully', type: 'success' });
       setShowDeleteConfirm(null);
       fetchData();
