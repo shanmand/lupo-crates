@@ -3,6 +3,7 @@ import { MOCK_AUDIT_LOGS, MOCK_USERS } from '../constants';
 import { Activity, Clock, User, ArrowRight, Shield, Database, Receipt, Zap, Loader2 } from 'lucide-react';
 import { AuditLog, User as DBUser } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { formatDateTime } from '../constants';
 
 const AuditView: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -105,7 +106,7 @@ const AuditView: React.FC = () => {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 group">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{new Date(log.timestamp).toLocaleString()}</span>
+                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{formatDateTime(log.timestamp)}</span>
                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">{log.entity_type} #{log.entity_id}</span>
                         </div>
                         <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight mt-1 group-hover:text-amber-600 transition-colors">

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { BatchMovement, Truck, Driver } from '../types';
+import { formatDateTime } from '../constants';
 import { AlertTriangle, Trash2, RefreshCw, CheckCircle2, Truck as TruckIcon, User as UserIcon, Database, Filter } from 'lucide-react';
 
 const DatabaseCleanup: React.FC = () => {
@@ -162,7 +163,7 @@ const DatabaseCleanup: React.FC = () => {
                   <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-8 py-5">
                       <p className="text-xs font-black text-slate-900">{m.id}</p>
-                      <p className="text-[10px] text-slate-400 font-bold">{new Date(m.timestamp).toLocaleString()}</p>
+                      <p className="text-[10px] text-slate-400 font-bold">{formatDateTime(m.timestamp)}</p>
                     </td>
                     <td className="px-8 py-5">
                       <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-black text-slate-600">#{m.batch_id}</span>
