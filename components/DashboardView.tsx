@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Truck, Package, AlertTriangle, TrendingUp, ShieldAlert, User as UserIcon, UserCheck, Loader2, Zap, Activity, CheckCircle, Clock, DollarSign } from 'lucide-react';
 import { User as UserType, DashboardStats, BatchForensics, AllSource } from '../types';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
-import { MOCK_BATCHES, MOCK_LOCATIONS } from '../constants';
+import { MOCK_BATCHES, MOCK_LOCATIONS, formatCurrency } from '../constants';
 
 interface DashboardViewProps {
   currentUser: UserType;
@@ -156,15 +156,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
 
     fetchDashboardData();
   }, [branchContext]);
-
-  const formatCurrency = (val: any) => {
-    const num = typeof val === 'number' ? val : parseFloat(val);
-    return new Intl.NumberFormat('en-ZA', { 
-      style: 'currency', 
-      currency: 'ZAR',
-      minimumFractionDigits: 2 
-    }).format(isNaN(num) ? 0 : num);
-  };
 
   if (isLoading) {
     return (

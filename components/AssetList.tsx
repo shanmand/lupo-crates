@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, Search, Filter, Loader2, CheckCircle2, AlertCircle, Trash2, Edit2, Database, Shield, CreditCard, History } from 'lucide-react';
+import { Package, Plus, Search, Filter, Loader2, CheckCircle2, AlertCircle, Trash2, Edit2, Database, Shield, CreditCard, History, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured, fetchAllSources } from '../supabase';
-import { AssetMaster, User } from '../types';
+import { AssetMaster, User, AssetType, OwnershipType } from '../types';
 import { formatNumber } from '../constants';
 
 interface AssetListProps {
@@ -15,6 +15,8 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'registry' | 'types'>('registry');
   const [showAddTypeModal, setShowAddTypeModal] = useState(false);
+  const [editingType, setEditingType] = useState<AssetMaster | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
@@ -23,10 +25,10 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
   const [typeForm, setTypeForm] = useState({
     id: '',
     name: '',
-    type: 'Crate',
+    type: AssetType.CRATE,
     dimensions: '',
     material: '',
-    ownership_type: 'Internal'
+    ownership_type: OwnershipType.INTERNAL
   });
 
   const fetchData = async () => {
@@ -88,17 +90,56 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('asset_master').insert([typeForm]);
-      if (error) throw error;
+      if (editingType) {
+        const { error } = await supabase
+          .from('asset_master')
+          .update(typeForm)
+          .eq('id', editingType.id);
+        if (error) throw error;
+        setNotification({ message: `Asset type ${typeForm.name} updated successfully.`, type: 'success' });
+      } else {
+        const { error } = await supabase.from('asset_master').insert([typeForm]);
+        if (error) throw error;
+        setNotification({ message: `Asset type ${typeForm.name} registered successfully.`, type: 'success' });
+      }
 
-      setNotification({ message: `Asset type ${typeForm.name} registered successfully.`, type: 'success' });
       setShowAddTypeModal(false);
-      setTypeForm({ id: '', name: '', type: 'Crate', dimensions: '', material: '', ownership_type: 'Internal' });
+      setEditingType(null);
+      setTypeForm({ id: '', name: '', type: AssetType.CRATE, dimensions: '', material: '', ownership_type: OwnershipType.INTERNAL });
       fetchData();
     } catch (error: any) {
-      setNotification({ message: error.message || 'Failed to register asset type', type: 'error' });
+      setNotification({ message: error.message || 'Failed to save asset type', type: 'error' });
     } finally {
       setIsSubmitting(false);
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleEditType = (type: AssetMaster) => {
+    setEditingType(type);
+    setTypeForm({
+      id: type.id,
+      name: type.name,
+      type: type.type,
+      dimensions: type.dimensions,
+      material: type.material,
+      ownership_type: type.ownership_type
+    });
+    setShowAddTypeModal(true);
+  };
+
+  const handleDeleteType = async (id: string) => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const { error } = await supabase.from('asset_master').delete().eq('id', id);
+      if (error) throw error;
+      setNotification({ message: 'Asset type deleted successfully.', type: 'success' });
+      setDeletingId(null);
+      fetchData();
+    } catch (error: any) {
+      setNotification({ message: error.message || 'Failed to delete asset type', type: 'error' });
+    } finally {
       setTimeout(() => setNotification(null), 5000);
     }
   };
@@ -256,8 +297,18 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button className="p-2 text-slate-300 hover:text-slate-900 transition-colors"><Edit2 size={14} /></button>
-                    <button className="p-2 text-slate-300 hover:text-rose-600 transition-colors"><Trash2 size={14} /></button>
+                    <button 
+                      onClick={() => handleEditType(type)}
+                      className="p-2 text-slate-300 hover:text-slate-900 transition-colors"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button 
+                      onClick={() => setDeletingId(type.id)}
+                      className="p-2 text-slate-300 hover:text-rose-600 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
                 <div className="p-6 space-y-4">
@@ -294,10 +345,19 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
           <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-8 py-6 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Plus size={20} className="text-emerald-400" />
-                <h3 className="font-black text-sm uppercase tracking-widest">Register Asset Type</h3>
+                {editingType ? <Edit2 size={20} className="text-amber-400" /> : <Plus size={20} className="text-emerald-400" />}
+                <h3 className="font-black text-sm uppercase tracking-widest">
+                  {editingType ? 'Edit Asset Type' : 'Register Asset Type'}
+                </h3>
               </div>
-              <button onClick={() => setShowAddTypeModal(false)} className="text-slate-400 hover:text-white transition-colors">
+              <button 
+                onClick={() => {
+                  setShowAddTypeModal(false);
+                  setEditingType(null);
+                  setTypeForm({ id: '', name: '', type: AssetType.CRATE, dimensions: '', material: '', ownership_type: OwnershipType.INTERNAL });
+                }} 
+                className="text-slate-400 hover:text-white transition-colors"
+              >
                 <CheckCircle2 size={24} />
               </button>
             </div>
@@ -308,9 +368,10 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset Code (ID)</label>
                   <input 
                     required
+                    disabled={!!editingType}
                     type="text"
                     placeholder="E.g. CRT-STD"
-                    className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50"
                     value={typeForm.id}
                     onChange={e => setTypeForm({...typeForm, id: e.target.value.toUpperCase()})}
                   />
@@ -335,11 +396,10 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
                     required
                     className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900"
                     value={typeForm.type}
-                    onChange={e => setTypeForm({...typeForm, type: e.target.value})}
+                    onChange={e => setTypeForm({...typeForm, type: e.target.value as AssetType})}
                   >
-                    <option value="Crate">Crate</option>
-                    <option value="Pallet">Pallet</option>
-                    <option value="Other">Other</option>
+                    <option value={AssetType.CRATE}>Crate</option>
+                    <option value={AssetType.PALLET}>Pallet</option>
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -348,10 +408,10 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
                     required
                     className="w-full border border-slate-200 rounded-xl p-4 text-sm font-bold bg-slate-50 outline-none focus:ring-2 focus:ring-slate-900"
                     value={typeForm.ownership_type}
-                    onChange={e => setTypeForm({...typeForm, ownership_type: e.target.value})}
+                    onChange={e => setTypeForm({...typeForm, ownership_type: e.target.value as OwnershipType})}
                   >
-                    <option value="Internal">Internal (Lupo Owned)</option>
-                    <option value="External">External (CHEP/Supplier)</option>
+                    <option value={OwnershipType.INTERNAL}>Internal (Lupo Owned)</option>
+                    <option value={OwnershipType.EXTERNAL}>External (CHEP/Supplier)</option>
                   </select>
                 </div>
               </div>
@@ -380,9 +440,13 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button 
+                  <button 
                   type="button"
-                  onClick={() => setShowAddTypeModal(false)}
+                  onClick={() => {
+                    setShowAddTypeModal(false);
+                    setEditingType(null);
+                    setTypeForm({ id: '', name: '', type: AssetType.CRATE, dimensions: '', material: '', ownership_type: OwnershipType.INTERNAL });
+                  }}
                   className="flex-1 px-6 py-4 border border-slate-200 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
                 >
                   Cancel
@@ -393,10 +457,42 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
                   className="flex-[2] bg-slate-900 text-white font-black py-4 rounded-2xl shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-3 uppercase tracking-widest disabled:opacity-50"
                 >
                   {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-                  Register Type
+                  {editingType ? 'Update Type' : 'Register Type'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deletingId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center space-y-6">
+              <div className="w-20 h-20 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                <Trash2 size={40} />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Delete Asset Type?</h3>
+                <p className="text-slate-500 text-sm font-medium">
+                  Are you sure you want to delete this asset type? This action cannot be undone and may fail if there are active batches using this type.
+                </p>
+              </div>
+              <div className="flex gap-4 pt-4">
+                <button 
+                  onClick={() => setDeletingId(null)}
+                  className="flex-1 px-6 py-4 border border-slate-200 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => handleDeleteType(deletingId)}
+                  className="flex-1 bg-rose-600 text-white font-black py-4 rounded-2xl shadow-xl hover:bg-rose-700 transition-all uppercase tracking-widest"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

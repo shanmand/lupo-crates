@@ -58,20 +58,22 @@ export const formatCurrency = (val: number | string | null | undefined) => {
   const num = typeof val === 'string' ? parseFloat(val) : val;
   if (num === null || num === undefined || isNaN(num)) return 'R0.00';
   
-  // South African Rand format: R2 380.21
-  // We use 'en-ZA' which uses space as thousands separator and ',' as decimal separator.
-  // We replace the comma with a dot to meet the user's requirement.
-  return 'R' + num.toLocaleString('en-ZA', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  }).replace(',', '.');
+  // toFixed(2) always uses '.' as decimal separator
+  const fixed = num.toFixed(2);
+  const [integerPart, decimalPart] = fixed.split('.');
+  
+  // Add comma as thousand separator
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  
+  return `R${formattedInteger}.${decimalPart}`;
 };
 
 export const formatNumber = (val: number | string | null | undefined) => {
   const num = typeof val === 'string' ? parseFloat(val) : val;
   if (num === null || num === undefined || isNaN(num)) return '0';
   
-  return num.toLocaleString('en-ZA').replace(',', '.');
+  const integerPart = Math.floor(num).toString();
+  return integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 };
 
 export const formatDateTime = (date: string | Date | null | undefined) => {
