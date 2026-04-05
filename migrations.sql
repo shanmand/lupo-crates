@@ -899,8 +899,19 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Fix get_supplier_liability ambiguity (Consolidated Version)
-DROP FUNCTION IF EXISTS public.get_supplier_liability(UUID, DATE, DATE) CASCADE;
-DROP FUNCTION IF EXISTS public.get_supplier_liability(TEXT, DATE, DATE) CASCADE;
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT proname, oidvectortypes(proargtypes) as args
+              FROM pg_proc
+              INNER JOIN pg_namespace ON pg_proc.pronamespace = pg_namespace.oid
+              WHERE proname = 'get_supplier_liability'
+                AND nspname = 'public')
+    LOOP
+        EXECUTE 'DROP FUNCTION public.' || r.proname || '(' || r.args || ') CASCADE';
+    END LOOP;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.get_supplier_liability(
     p_supplier_id TEXT,
@@ -993,6 +1004,20 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION public.get_supplier_liability(TEXT, DATE, DATE) TO authenticated, service_role;
 
 -- Finalize Settlement RPC
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT proname, oidvectortypes(proargtypes) as args
+              FROM pg_proc
+              INNER JOIN pg_namespace ON pg_proc.pronamespace = pg_namespace.oid
+              WHERE proname = 'finalize_payment_settlement'
+                AND nspname = 'public')
+    LOOP
+        EXECUTE 'DROP FUNCTION public.' || r.proname || '(' || r.args || ') CASCADE';
+    END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.finalize_payment_settlement(
     p_supplier_id TEXT,
     p_start_date DATE,
