@@ -49,8 +49,15 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
 
       const batches = batchesRes.data || [];
       const assetsData = assetRes.data || [];
+      const uniqueAssetsMap = new Map();
+      assetsData.forEach(a => {
+        if (!uniqueAssetsMap.has(a.id)) {
+          uniqueAssetsMap.set(a.id, a);
+        }
+      });
+      const uniqueAssets = Array.from(uniqueAssetsMap.values());
 
-      setAssets(assetsData);
+      setAssets(uniqueAssets);
       setSources(sourcesData);
 
       // Aggregate Inventory Summary
@@ -494,7 +501,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
                   onChange={e => setIntakeForm({...intakeForm, asset_id: e.target.value})}
                 >
                   <option value="">Select Asset...</option>
-                  {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  {assets.map((a, idx) => <option key={`asset-opt-${a.id}-${idx}`} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
 
@@ -519,7 +526,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
                     onChange={e => setIntakeForm({...intakeForm, location_id: e.target.value})}
                   >
                     <option value="">Select Destination...</option>
-                    {sources.map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)}
+                    {sources.map((s, idx) => <option key={`source-dest-opt-${s.id}-${idx}`} value={s.id}>{s.display_name}</option>)}
                   </select>
                 </div>
               </div>
@@ -532,7 +539,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
                   onChange={e => setIntakeForm({...intakeForm, origin_id: e.target.value})}
                 >
                   <option value="">Select Origin...</option>
-                  {sources.map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)}
+                  {sources.map((s, idx) => <option key={`source-origin-opt-${s.id}-${idx}`} value={s.id}>{s.display_name}</option>)}
                 </select>
               </div>
 

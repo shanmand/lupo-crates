@@ -567,7 +567,7 @@ const AdminPanel: React.FC<{ currentRole: UserRole }> = ({ currentRole }) => {
                   <div key={f.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{f.fee_type}</p>
-                      <p className="text-sm font-bold text-slate-800">R {f.amount_zar.toFixed(2)}</p>
+                      <p className="text-sm font-bold text-slate-800">R {(f.amount_zar || 0).toFixed(2)}</p>
                     </div>
                     <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">Active</span>
                   </div>

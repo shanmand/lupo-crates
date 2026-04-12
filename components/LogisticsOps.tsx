@@ -471,15 +471,15 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                     onChange={e => setOrigin(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {origins.filter(o => (o.partner_type === 'Internal' || o.category === 'Home') && o.type !== LocationType.IN_TRANSIT).map(o => <option key={`origin-home-${o.id}`} value={o.id}>{o.display_name}</option>)}
+                      {origins.filter(o => (o.partner_type === 'Internal' || o.category === 'Home') && o.type !== LocationType.IN_TRANSIT).map((o, idx) => <option key={`origin-home-${o.source_table}-${o.id}-${idx}`} value={o.id}>{o.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Customers & Partners">
                       {!isInternal && origins
                         .filter(o => o.partner_type !== 'Internal' && o.category !== 'Home' && o.type !== LocationType.IN_TRANSIT)
-                        .map(o => <option key={`origin-partner-${o.id}`} value={o.id}>{o.display_name}</option>)}
+                        .map((o, idx) => <option key={`origin-partner-${o.source_table}-${o.id}-${idx}`} value={o.id}>{o.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Trucks (In-Transit)">
-                      {origins.filter(o => o.type === LocationType.IN_TRANSIT).map(o => <option key={`origin-transit-${o.id}`} value={o.id}>{o.display_name}</option>)}
+                      {origins.filter(o => o.type === LocationType.IN_TRANSIT).map((o, idx) => <option key={`origin-transit-${o.source_table}-${o.id}-${idx}`} value={o.id}>{o.display_name}</option>)}
                     </optgroup>
                   </select>
                 </label>
@@ -494,15 +494,15 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                     onChange={e => setDestination(e.target.value)}
                   >
                     <optgroup label="Internal Facilities">
-                      {destinations.filter(d => (d.partner_type === 'Internal' || d.category === 'Home') && d.type !== LocationType.IN_TRANSIT).map(d => <option key={`dest-home-${d.id}`} value={d.id}>{d.display_name}</option>)}
+                      {destinations.filter(d => (d.partner_type === 'Internal' || d.category === 'Home') && d.type !== LocationType.IN_TRANSIT).map((d, idx) => <option key={`dest-home-${d.source_table}-${d.id}-${idx}`} value={d.id}>{d.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Customers & Partners">
                       {!isInternal && destinations
                         .filter(d => d.partner_type !== 'Internal' && d.category !== 'Home' && d.type !== LocationType.IN_TRANSIT)
-                        .map(d => <option key={`dest-partner-${d.id}`} value={d.id}>{d.display_name}</option>)}
+                        .map((d, idx) => <option key={`dest-partner-${d.source_table}-${d.id}-${idx}`} value={d.id}>{d.display_name}</option>)}
                     </optgroup>
                     <optgroup label="Trucks (In-Transit)">
-                      {destinations.filter(d => d.type === LocationType.IN_TRANSIT).map(d => <option key={`dest-transit-${d.id}`} value={d.id}>{d.display_name}</option>)}
+                      {destinations.filter(d => d.type === LocationType.IN_TRANSIT).map((d, idx) => <option key={`dest-transit-${d.source_table}-${d.id}-${idx}`} value={d.id}>{d.display_name}</option>)}
                     </optgroup>
                   </select>
                 </label>
@@ -529,8 +529,8 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                             onChange={e => handleAssetChange(idx, 'batchId', e.target.value)}
                           >
                             <option value="">Select Batch at Origin</option>
-                            {availableBatches.map(b => (
-                              <option key={b.id} value={b.id}>
+                            {availableBatches.map((b, bIdx) => (
+                              <option key={`batch-opt-${b.id}-${bIdx}`} value={b.id}>
                                 {b.id} — {assetsMaster.find(am => am.id === b.asset_id)?.name} ({b.quantity} available)
                               </option>
                             ))}

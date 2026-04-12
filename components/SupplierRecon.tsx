@@ -253,7 +253,7 @@ const SupplierRecon: React.FC = () => {
                       <div className="space-y-0.5">
                         <p className="text-sm font-black text-slate-800">{formatCurrency(settlement)}</p>
                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                            {loss.loss_type === LossType.SCRAPPED ? 'Salvage Rate Applied' : `Rate: R ${fee?.amount_zar.toFixed(2)}`}
+                            {loss.loss_type === LossType.SCRAPPED ? 'Salvage Rate Applied' : `Rate: R ${(fee?.amount_zar || 0).toFixed(2)}`}
                         </p>
                       </div>
                     </td>

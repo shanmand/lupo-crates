@@ -44,7 +44,15 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
         fetchAllSources()
       ]);
 
-      if (typesRes.data) setAssetTypes(typesRes.data);
+      if (typesRes.data) {
+        const uniqueTypesMap = new Map();
+        typesRes.data.forEach(t => {
+          if (!uniqueTypesMap.has(t.id)) {
+            uniqueTypesMap.set(t.id, t);
+          }
+        });
+        setAssetTypes(Array.from(uniqueTypesMap.values()));
+      }
       
       if (batchesRes.data && sources && typesRes.data) {
         const batches = batchesRes.data;
@@ -225,8 +233,8 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredRegistry.map(item => (
-                    <tr key={item.batch_id} className="group hover:bg-slate-50/50 transition-colors">
+                  {filteredRegistry.map((item, idx) => (
+                    <tr key={`${item.batch_id}-${idx}`} className="group hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition-all">
@@ -284,8 +292,8 @@ const AssetList: React.FC<AssetListProps> = ({ currentUser }) => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {assetTypes.map(type => (
-              <div key={type.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all group">
+            {assetTypes.map((type, idx) => (
+              <div key={`${type.id}-${idx}`} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all group">
                 <div className="p-6 border-b border-slate-50 flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-slate-100 text-slate-900 rounded-2xl flex items-center justify-center group-hover:bg-slate-900 group-hover:text-white transition-all">

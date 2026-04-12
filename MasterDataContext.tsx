@@ -93,7 +93,15 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
       .select('*')
       .eq('is_active', true)
       .order('name');
-    if (!error && data) setPersonnel(data);
+    if (!error && data) {
+      const uniqueMap = new Map();
+      data.forEach(p => {
+        if (!uniqueMap.has(p.id)) {
+          uniqueMap.set(p.id, p);
+        }
+      });
+      setPersonnel(Array.from(uniqueMap.values()));
+    }
   }, []);
 
   const fetchAssets = useCallback(async () => {
@@ -101,7 +109,16 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
       .from('asset_master')
       .select('*')
       .order('name');
-    if (!error && data) setAssets(data);
+    if (!error && data) {
+      // Deduplicate by ID
+      const uniqueMap = new Map();
+      data.forEach(item => {
+        if (!uniqueMap.has(item.id)) {
+          uniqueMap.set(item.id, item);
+        }
+      });
+      setAssets(Array.from(uniqueMap.values()));
+    }
   }, []);
 
   const fetchBatches = useCallback(async () => {
@@ -184,7 +201,16 @@ export const MasterDataProvider: React.FC<{ children: ReactNode }> = ({ children
       source_table: 'BusinessParty'
     }));
 
-    return [...locSources, ...partySources].sort((a, b) => {
+    const combined = [...locSources, ...partySources];
+    const uniqueMap = new Map();
+    combined.forEach(item => {
+      // If duplicate ID, prefer Location over BusinessParty or just keep the first one
+      if (!uniqueMap.has(item.id)) {
+        uniqueMap.set(item.id, item);
+      }
+    });
+
+    return Array.from(uniqueMap.values()).sort((a, b) => {
       if (a.sort_group !== b.sort_group) return a.sort_group - b.sort_group;
       return a.name.localeCompare(b.name);
     });

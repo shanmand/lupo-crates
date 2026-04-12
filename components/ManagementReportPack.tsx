@@ -229,7 +229,7 @@ const ManagementReportPack: React.FC = () => {
   const commentary = useMemo(() => {
     const blocks = [];
     if (kpis?.shrinkage_rate > 5) {
-      blocks.push(`CRITICAL: Shrinkage rate is currently ${kpis.shrinkage_rate.toFixed(2)}%, which is above the 5% threshold. Immediate stock audit required at high-variance locations.`);
+      blocks.push(`CRITICAL: Shrinkage rate is currently ${(kpis?.shrinkage_rate || 0).toFixed(2)}%, which is above the 5% threshold. Immediate stock audit required at high-variance locations.`);
     }
     if (reportStats.redListCount > 0) {
       blocks.push(`COMPLIANCE RISK: There are ${reportStats.redListCount} expired licenses/COFs in the fleet. This represents a significant regulatory risk to operations.`);

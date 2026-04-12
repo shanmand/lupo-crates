@@ -70,7 +70,15 @@ export const fetchAllSources = async (): Promise<AllSource[]> => {
     source_table: 'BusinessParty'
   }));
 
-  return [...locations, ...parties].sort((a, b) => {
+  const combined = [...locations, ...parties];
+  const uniqueMap = new Map();
+  combined.forEach(item => {
+    if (!uniqueMap.has(item.id)) {
+      uniqueMap.set(item.id, item);
+    }
+  });
+
+  return Array.from(uniqueMap.values()).sort((a, b) => {
     if (a.sort_group !== b.sort_group) return a.sort_group - b.sort_group;
     return a.name.localeCompare(b.name);
   });
