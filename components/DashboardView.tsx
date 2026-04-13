@@ -83,15 +83,30 @@ const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, branchContex
         };
 
         // Aggregate Stats
-        const filteredBatches = branchContext === 'Consolidated' 
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        const filteredBatches = (branchContext === 'Consolidated' 
           ? batches 
           : batches.filter(b => {
               const loc = sources.find(s => s.id === b.current_location_id);
               const branch = branches.find(br => br.id === loc?.branch_id);
               return branch?.name === branchContext;
-            });
-
-        const now = new Date();
+            })
+        ).filter(b => {
+          // QSR Exclusion Logic: Exclude confirmed customer transfers from previous months
+          if (b.transfer_confirmed_by_customer && b.confirmation_date) {
+            const loc = sources.find(s => s.id === b.current_location_id);
+            if (loc?.partner_type === 'Customer') {
+              const confDate = new Date(b.confirmation_date);
+              if (confDate.getMonth() !== currentMonth || confDate.getFullYear() !== currentYear) {
+                return false;
+              }
+            }
+          }
+          return true;
+        });
         const statsData: DashboardStats = filteredBatches.reduce((acc, b) => {
           const loc = sources.find(s => s.id === b.current_location_id);
           const isPending = loc?.type === 'In Transit';

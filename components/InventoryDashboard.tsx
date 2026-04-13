@@ -64,8 +64,25 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
 
       // Aggregate Inventory Summary
       const summaryMap = new Map();
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
       batches
         .filter(b => b.status === 'Success' && b.quantity > 0)
+        .filter(b => {
+          // QSR Exclusion Logic: Exclude confirmed customer transfers from previous months
+          if (b.transfer_confirmed_by_customer && b.confirmation_date) {
+            const loc = sourcesData.find(s => s.id === b.current_location_id);
+            if (loc?.partner_type === 'Customer') {
+              const confDate = new Date(b.confirmation_date);
+              if (confDate.getMonth() !== currentMonth || confDate.getFullYear() !== currentYear) {
+                return false;
+              }
+            }
+          }
+          return true;
+        })
         .forEach(b => {
           const key = `${b.current_location_id}-${b.asset_id}`;
           const loc = sourcesData.find(s => s.id === b.current_location_id);

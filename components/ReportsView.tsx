@@ -34,7 +34,7 @@ const ReportsView: React.FC = () => {
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'inventory' | 'trace' | 'trips'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'trace' | 'trips' | 'movements'>('inventory');
 
   // Filters
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
@@ -44,6 +44,7 @@ const ReportsView: React.FC = () => {
   const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [tripReportLevel, setTripReportLevel] = useState<'driver' | 'location'>('driver');
+  const [movements, setMovements] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -61,6 +62,19 @@ const ReportsView: React.FC = () => {
           condition: m.condition,
           driver_name: MOCK_DRIVERS.find(d => d.id === m.driver_id)?.full_name || 'Unknown',
           truck_plate: MOCK_TRUCKS.find(t => t.id === m.truck_id)?.plate_number || 'Unknown'
+        })));
+        setMovements(MOCK_MOVEMENTS.map(m => ({
+          movement_id: m.id,
+          transaction_date: m.transaction_date,
+          batch_id: m.batch_id,
+          asset_name: MOCK_ASSETS.find(a => a.id === MOCK_BATCHES.find(b => b.id === m.batch_id)?.asset_id)?.name || 'Unknown',
+          quantity: m.quantity,
+          from_location: MOCK_LOCATIONS.find(l => l.id === m.from_location_id)?.name || 'Unknown',
+          to_location: MOCK_LOCATIONS.find(l => l.id === m.to_location_id)?.name || 'Unknown',
+          driver_name: MOCK_DRIVERS.find(d => d.id === m.driver_id)?.full_name || 'Unknown',
+          truck_plate: MOCK_TRUCKS.find(t => t.id === m.truck_id)?.plate_number || 'Unknown',
+          condition: m.condition,
+          notes: m.notes
         })));
         setTrips([
           {
@@ -80,7 +94,7 @@ const ReportsView: React.FC = () => {
       }
       setIsLoading(true);
       try {
-        const [bRes, sources, aRes, brRes, mRes, tripsRes, stopsRes, driversRes, trucksRes, feesRes] = await Promise.all([
+        const [bRes, sources, aRes, brRes, mRes, tripsRes, stopsRes, driversRes, trucksRes, feesRes, moveHistoryRes] = await Promise.all([
           supabase.from('batches').select('*'),
           fetchAllSources(),
           supabase.from('asset_master').select('*'),
@@ -90,7 +104,8 @@ const ReportsView: React.FC = () => {
           supabase.from('trip_stops').select('*'),
           supabase.from('drivers').select('*'),
           supabase.from('trucks').select('*'),
-          supabase.from('fee_schedule').select('*')
+          supabase.from('fee_schedule').select('*'),
+          supabase.from('vw_movement_history_report').select('*').order('timestamp', { ascending: false })
         ]);
 
         if (bRes.data) {
@@ -134,6 +149,11 @@ const ReportsView: React.FC = () => {
           });
           setTraces(mapped);
         }
+
+        if (moveHistoryRes.data) {
+          setMovements(moveHistoryRes.data);
+        }
+
         if (sources) {
           setLocations(sources as any);
         }
@@ -156,9 +176,28 @@ const ReportsView: React.FC = () => {
     fetchData();
   }, []);
 
+  const filteredMovements = useMemo(() => {
+    return movements.filter(m => {
+      const mDate = m.transaction_date || '';
+      const inRange = mDate >= startDate && mDate <= endDate;
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = searchQuery === '' || 
+                           (m.batch_id || '').toLowerCase().includes(searchLower) ||
+                           (m.asset_name || '').toLowerCase().includes(searchLower) ||
+                           (m.from_location || '').toLowerCase().includes(searchLower) ||
+                           (m.to_location || '').toLowerCase().includes(searchLower) ||
+                           (m.driver_name || '').toLowerCase().includes(searchLower);
+      return inRange && matchesSearch;
+    });
+  }, [movements, startDate, endDate, searchQuery]);
+
   const filteredData = useMemo(() => {
     const locationMap = new Map<string, Location>(locations.map(l => [l.id, l]));
     const assetMap = new Map<string, AssetMaster>(assets.map(a => [a.id, a]));
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
     return batches.filter(batch => {
       const loc = locationMap.get(batch.current_location_id);
@@ -177,7 +216,18 @@ const ReportsView: React.FC = () => {
       // "Our Account" Logic: External Assets at External Locations are removed from our account
       const isOurAccount = !(asset?.ownership_type === 'External' && loc?.category === 'External');
 
-      return matchesBranch && matchesPartner && matchesAsset && matchesSearch && isOurAccount;
+      // QSR Exclusion Logic: Exclude confirmed customer transfers from previous months
+      let isQsrExcluded = false;
+      if (batch.transfer_confirmed_by_customer && batch.confirmation_date) {
+        if (loc?.partner_type === 'Customer') {
+          const confDate = new Date(batch.confirmation_date);
+          if (confDate.getMonth() !== currentMonth || confDate.getFullYear() !== currentYear) {
+            isQsrExcluded = true;
+          }
+        }
+      }
+
+      return matchesBranch && matchesPartner && matchesAsset && matchesSearch && isOurAccount && !isQsrExcluded;
     });
   }, [batches, locations, assets, selectedBranch, selectedPartnerType, selectedAssetType, searchQuery]);
 
@@ -504,6 +554,12 @@ const ReportsView: React.FC = () => {
           >
             Trip Audit Report
           </button>
+          <button 
+            onClick={() => setActiveTab('movements')}
+            className={`px-6 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'movements' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400'}`}
+          >
+            Movement History
+          </button>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-4">
@@ -511,14 +567,14 @@ const ReportsView: React.FC = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
-              placeholder={activeTab === 'trips' ? "Search drivers or trucks..." : "Search batches, assets, or locations..."}
+              placeholder={activeTab === 'trips' ? "Search drivers or trucks..." : activeTab === 'movements' ? "Search batches, assets, drivers..." : "Search batches, assets, or locations..."}
               className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900 transition-all"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
           
-          {activeTab === 'trips' ? (
+          {activeTab === 'trips' || activeTab === 'movements' ? (
             <div className="flex flex-wrap gap-4 items-center">
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
                 <Calendar size={14} className="text-slate-400" />
@@ -536,14 +592,16 @@ const ReportsView: React.FC = () => {
                   className="bg-transparent border-none text-xs font-bold outline-none"
                 />
               </div>
-              <select 
-                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
-                value={tripReportLevel}
-                onChange={e => setTripReportLevel(e.target.value as 'driver' | 'location')}
-              >
-                <option value="driver">Driver Level</option>
-                <option value="location">Location Level</option>
-              </select>
+              {activeTab === 'trips' && (
+                <select 
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-900"
+                  value={tripReportLevel}
+                  onChange={e => setTripReportLevel(e.target.value as 'driver' | 'location')}
+                >
+                  <option value="driver">Driver Level</option>
+                  <option value="location">Location Level</option>
+                </select>
+              )}
             </div>
           ) : (
             <div className="flex flex-wrap gap-4">
@@ -701,6 +759,59 @@ const ReportsView: React.FC = () => {
                 {Object.keys(stats.conditionSummary).length === 0 && (
                   <tr key="empty-trace">
                     <td colSpan={5} className="py-20 text-center text-slate-400 italic text-sm">No trace data found for this branch.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : activeTab === 'movements' ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HistoryIcon size={18} className="text-indigo-500" />
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest">Movement History Report</h3>
+            </div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredMovements.length} Movements Found</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/30">
+                  <th className="px-6 py-4">Date</th>
+                  <th className="px-6 py-4">Batch ID</th>
+                  <th className="px-6 py-4">Asset</th>
+                  <th className="px-6 py-4">From</th>
+                  <th className="px-6 py-4">To</th>
+                  <th className="px-6 py-4">Quantity</th>
+                  <th className="px-6 py-4">Driver</th>
+                  <th className="px-6 py-4">Condition</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filteredMovements.map((m, idx) => (
+                  <tr key={m.movement_id || `move-${idx}`} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 text-xs font-bold text-slate-700">{formatDateTime(m.transaction_date || m.timestamp)}</td>
+                    <td className="px-6 py-4 text-xs font-black text-slate-900">{m.batch_id}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-700">{m.asset_name}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-700">{m.from_location}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-700">{m.to_location}</td>
+                    <td className="px-6 py-4 text-xs font-black text-slate-900">{formatNumber(m.quantity)}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-700">{m.driver_name}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${
+                        m.condition === 'Clean' ? 'bg-emerald-100 text-emerald-700' :
+                        m.condition === 'Dirty' ? 'bg-amber-100 text-amber-700' :
+                        'bg-rose-100 text-rose-700'
+                      }`}>
+                        {m.condition}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {filteredMovements.length === 0 && (
+                  <tr key="empty-movements">
+                    <td colSpan={8} className="py-20 text-center text-slate-400 italic text-sm">No movement history found for the selected period.</td>
                   </tr>
                 )}
               </tbody>

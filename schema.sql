@@ -407,33 +407,60 @@ CREATE TABLE public.truck_roadworthy_history (
 CREATE OR REPLACE FUNCTION public.calculate_batch_accrual(batch_id_input TEXT)
 RETURNS NUMERIC AS $$
 DECLARE
-    total_accrual NUMERIC := 0;
+    v_total_accrual NUMERIC := 0;
+    v_batch RECORD;
+    v_end_date TIMESTAMPTZ;
 BEGIN
-    WITH AccrualPhases AS (
+    -- Get batch info
+    SELECT * INTO v_batch FROM public.batches WHERE id = batch_id_input;
+    IF NOT FOUND THEN RETURN 0; END IF;
+
+    -- Determine the end date for accrual (accrue until settled or now)
+    v_end_date := COALESCE(v_batch.settled_at, NOW());
+
+    -- 1. Daily Rental Accrual (handles multiple fee periods)
+    WITH DailyPhases AS (
         SELECT 
-            b.id,
-            b.quantity,
             fs.amount_zar,
-            GREATEST(b.created_at, fs.effective_from::timestamp) as phase_start,
-            LEAST(
-                COALESCE(al.timestamp, ts.signed_at, NOW()), 
-                COALESCE(fs.effective_to::timestamp, '9999-12-31'::timestamp)
-            ) as phase_end
-        FROM public.batches b
-        JOIN public.fee_schedule fs ON b.asset_id = fs.asset_id
-        LEFT JOIN public.asset_losses al ON b.id = al.batch_id
-        LEFT JOIN public.thaan_slips ts ON b.id = ts.batch_id
-        WHERE b.id = batch_id_input
+            GREATEST(v_batch.transaction_date::timestamp, fs.effective_from::timestamp) as phase_start,
+            LEAST(v_end_date, COALESCE(fs.effective_to::timestamp, '9999-12-31'::timestamp)) as phase_end
+        FROM public.fee_schedule fs
+        WHERE fs.asset_id = v_batch.asset_id
           AND fs.fee_type LIKE 'Daily Rental%'
+          AND fs.is_active = TRUE
     )
     SELECT COALESCE(SUM(
-        EXTRACT(DAY FROM (phase_end - phase_start)) * amount_zar * quantity
+        EXTRACT(DAY FROM (phase_end - phase_start)) * amount_zar * v_batch.quantity
     ), 0)
-    INTO total_accrual
-    FROM AccrualPhases
+    INTO v_total_accrual
+    FROM DailyPhases
     WHERE phase_end > phase_start;
 
-    RETURN total_accrual;
+    -- 2. Issue Fee (One-time fee per unit, added to liability)
+    SELECT v_total_accrual + COALESCE(SUM(fs.amount_zar * v_batch.quantity), 0)
+    INTO v_total_accrual
+    FROM public.fee_schedule fs
+    WHERE fs.asset_id = v_batch.asset_id
+      AND fs.fee_type LIKE 'Issue Fee%'
+      AND fs.is_active = TRUE
+      AND fs.effective_from <= v_batch.transaction_date;
+
+    -- 3. Replacement Fee (If Lost, use replacement cost at time of settlement or current)
+    IF v_batch.status = 'Lost' THEN
+        SELECT v_total_accrual + COALESCE(SUM(fs.amount_zar * v_batch.quantity), 0)
+        INTO v_total_accrual
+        FROM public.fee_schedule fs
+        WHERE fs.asset_id = v_batch.asset_id
+          AND fs.fee_type LIKE 'Replacement Fee%'
+          AND fs.is_active = TRUE
+          AND (
+              (v_batch.is_settled = TRUE AND fs.effective_from <= v_batch.settled_at AND (fs.effective_to IS NULL OR fs.effective_to >= v_batch.settled_at))
+              OR
+              (v_batch.is_settled = FALSE AND fs.effective_to IS NULL)
+          );
+    END IF;
+
+    RETURN v_total_accrual;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -1031,6 +1058,11 @@ SELECT
 FROM public.batches b
 LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id
 LEFT JOIN public.branches br ON s.branch_id = br.id
+WHERE (
+    b.transfer_confirmed_by_customer = FALSE 
+    OR 
+    DATE_TRUNC('month', b.confirmation_date) = DATE_TRUNC('month', CURRENT_DATE)
+)
 GROUP BY br.name;
 
 -- BATCH FORENSICS (Recent Activity)
@@ -1158,6 +1190,11 @@ FROM public.batches b
 LEFT JOIN public.vw_all_sources s ON b.current_location_id = s.id
 LEFT JOIN public.asset_master am ON b.asset_id = am.id
 WHERE b.status = 'Success' AND b.quantity > 0
+  AND (
+    b.transfer_confirmed_by_customer = FALSE 
+    OR 
+    DATE_TRUNC('month', b.confirmation_date) = DATE_TRUNC('month', CURRENT_DATE)
+  )
 GROUP BY b.current_location_id, s.name, s.type, s.branch_id, b.asset_id, am.name, am.type;
 
 -- ASSET REGISTRY
@@ -1538,6 +1575,30 @@ CREATE POLICY "Allow all to anon" ON public.vehicle_inspections FOR ALL TO anon 
 CREATE POLICY "Allow all to anon" ON public.branch_budgets FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.driver_shifts FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.truck_roadworthy_history FOR ALL TO anon USING (true) WITH CHECK (true);
+
+-- MOVEMENT HISTORY REPORT
+DROP VIEW IF EXISTS public.vw_movement_history_report CASCADE;
+CREATE OR REPLACE VIEW public.vw_movement_history_report AS
+SELECT 
+    bm.id as movement_id,
+    bm.transaction_date,
+    bm.timestamp,
+    bm.batch_id,
+    am.name as asset_name,
+    bm.quantity,
+    s_from.name as from_location,
+    s_to.name as to_location,
+    d.full_name as driver_name,
+    t.plate_number as truck_plate,
+    bm.condition,
+    bm.notes
+FROM public.batch_movements bm
+JOIN public.batches b ON bm.batch_id = b.id
+JOIN public.asset_master am ON b.asset_id = am.id
+LEFT JOIN public.vw_all_sources s_from ON bm.from_location_id = s_from.id
+LEFT JOIN public.vw_all_sources s_to ON bm.to_location_id = s_to.id
+LEFT JOIN public.drivers d ON bm.driver_id = d.id
+LEFT JOIN public.trucks t ON bm.truck_id = t.id;
 
 -- REFRESH CACHE
 NOTIFY pgrst, 'reload schema';

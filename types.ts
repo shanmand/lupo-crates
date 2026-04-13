@@ -263,6 +263,7 @@ export interface BatchMovement {
   timestamp?: string;
   condition?: MovementCondition;
   origin_user_id?: string;
+  notes?: string;
 }
 
 export interface LogisticsTrace {
