@@ -1,14 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { MOCK_BATCHES, MOCK_MOVEMENTS, MOCK_LOCATIONS, MOCK_FEES, MOCK_ASSETS, MOCK_THAANS, formatCurrency } from '../constants';
-import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History as HistoryIcon, Camera, UploadCloud, XCircle, User as UserIcon, ArrowLeft } from 'lucide-react';
+import { Package, Truck as TruckIcon, Clock, MapPin, CheckCircle2, AlertCircle, FileText, Zap, History as HistoryIcon, Camera, UploadCloud, XCircle, User as UserIcon, ArrowLeft, Gavel } from 'lucide-react';
 import { FeeType, ThaanSlip, Batch, BatchMovement, Location, Truck as TruckType, Driver, AssetMaster, FeeSchedule, LogisticsTrace, MovementCondition } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { useMasterData } from '../MasterDataContext';
 import BatchFinancialDetailCard from './BatchFinancialDetailCard';
 import ForensicTable from './ForensicTable';
 
-const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchId: branchFilterId }) => {
+const BatchTracker: React.FC<{ selectedBranchId?: string, initialBatchId?: string }> = ({ selectedBranchId: branchFilterId, initialBatchId }) => {
   const { 
     locations, 
     trucks, 
@@ -23,8 +23,9 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
   const [movements, setMovements] = useState<BatchMovement[]>([]);
   const [traces, setTraces] = useState<LogisticsTrace[]>([]);
   const [fees, setFees] = useState<FeeSchedule[]>(isSupabaseConfigured ? [] : MOCK_FEES);
+  const [batchClaims, setBatchClaims] = useState<any[]>([]);
   
-  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(initialBatchId || null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -35,10 +36,11 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
     setIsLoading(true);
     try {
       console.log('BatchTracker: Fetching detail for batch:', batchId);
-      const [batchRes, thaanRes, movesRes, locations, parties] = await Promise.all([
+      const [batchRes, thaanRes, movesRes, claimsRes, locations, parties] = await Promise.all([
         supabase.from('batches').select('*').eq('id', batchId).single(),
         supabase.from('thaan_slips').select('*').eq('batch_id', batchId),
         supabase.from('batch_movements').select('*').eq('batch_id', batchId),
+        supabase.from('claims').select('*').eq('batch_id', batchId),
         supabase.from('locations').select('*'),
         supabase.from('business_parties').select('*')
       ]);
@@ -50,6 +52,7 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
         });
       }
       if (thaanRes.data) setThaans(thaanRes.data);
+      if (claimsRes.data) setBatchClaims(claimsRes.data);
       
       if (movesRes.data) {
         setMovements(movesRes.data);
@@ -265,10 +268,63 @@ const BatchTracker: React.FC<{ selectedBranchId?: string }> = ({ selectedBranchI
               onUpdate={() => activeBatchId && fetchBatchDetail(activeBatchId)} 
             />
 
+            {batchClaims.length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <Gavel size={18} className="text-amber-500" />
+                  Active Claims
+                </h3>
+                <div className="space-y-3">
+                  {batchClaims.map(claim => (
+                    <div key={claim.id} className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-xs font-black text-amber-800 uppercase tracking-widest">{claim.id}</p>
+                          <p className="text-[10px] text-amber-600 font-bold">{claim.type} • {claim.status}</p>
+                        </div>
+                        <p className="text-sm font-black text-amber-900">{formatCurrency(claim.amount_claimed_zar)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText size={18} className="text-slate-400" /> THAAN Slip</h3>
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUploadThaan} />
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      const type = window.confirm("Lodge as Damaged? (Cancel for Dirty)") ? 'Damaged' : 'Dirty';
+                      const amount = type === 'Damaged' ? 150 : 25;
+                      const claimId = `CLM-${Date.now().toString(36).toUpperCase()}`;
+                      
+                      supabase.from('claims').insert([{
+                        id: claimId,
+                        batch_id: activeBatchId,
+                        type,
+                        amount_claimed_zar: amount,
+                        status: 'Lodged'
+                      }]).then(() => {
+                        supabase.from('claim_audits').insert([{
+                          claim_id: claimId,
+                          status_from: 'None',
+                          status_to: 'Lodged',
+                          notes: 'Manually lodged from Batch Intelligence.',
+                          updated_by: 'Manager'
+                        }]).then(() => {
+                          alert("Claim lodged successfully.");
+                          fetchBatchDetail(activeBatchId!);
+                        });
+                      });
+                    }}
+                    className="px-3 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-amber-200 transition-all"
+                  >
+                    Lodge Claim
+                  </button>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUploadThaan} />
+                </div>
               </div>
               
               {uploadError && (

@@ -1,16 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { MOCK_CLAIMS, MOCK_BATCHES, MOCK_CLAIM_AUDITS } from '../constants';
-import { AlertCircle, Clock, CheckCircle2, History as HistoryIcon, User as UserIcon, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2, Truck as TruckIcon, Info } from 'lucide-react';
+import { AlertCircle, Clock, CheckCircle2, History as HistoryIcon, User as UserIcon, FileText, ChevronRight, XCircle, Search, ShieldAlert, Loader2, Truck as TruckIcon, Info, Plus } from 'lucide-react';
 import { ClaimStatus, Claim, Batch, ClaimAudit, Truck, Driver } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { formatCurrency, formatDateTime } from '../constants';
 
 interface ClaimsManagerProps {
   isManager: boolean;
+  onNavigate?: (tab: string, batchId?: string) => void;
 }
 
-const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
+const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager, onNavigate }) => {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [disputedBatches, setDisputedBatches] = useState<any[]>([]);
@@ -20,6 +21,51 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClaimId, setSelectedClaimId] = useState<string>('');
   const [activeView, setActiveView] = useState<'claims' | 'disputed'>('claims');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newClaimForm, setNewClaimForm] = useState({
+    batch_id: '',
+    type: 'Damaged' as 'Damaged' | 'Dirty',
+    amount: 150,
+    truck_id: '',
+    driver_id: '',
+    notes: ''
+  });
+
+  const handleCreateClaim = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSupabaseConfigured) return;
+    setIsLoading(true);
+    try {
+      const claimId = `CLM-${Date.now().toString(36).toUpperCase()}`;
+      const { error } = await supabase.from('claims').insert([{
+        id: claimId,
+        batch_id: newClaimForm.batch_id,
+        type: newClaimForm.type,
+        amount_claimed_zar: newClaimForm.amount,
+        truck_id: newClaimForm.truck_id || null,
+        driver_id: newClaimForm.driver_id || null,
+        status: 'Lodged'
+      }]);
+
+      if (error) throw error;
+
+      await supabase.from('claim_audits').insert([{
+        claim_id: claimId,
+        status_from: 'None',
+        status_to: 'Lodged',
+        notes: newClaimForm.notes || 'Manually created claim.',
+        updated_by: 'Manager'
+      }]);
+
+      alert("Claim created successfully.");
+      setShowCreateModal(false);
+      window.location.reload();
+    } catch (err: any) {
+      alert("Error creating claim: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -244,20 +290,93 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
         </div>
       </div>
 
-      <div className="flex gap-4 border-b border-slate-200 mb-6">
+      <div className="flex gap-4 border-b border-slate-200 mb-6 items-center justify-between">
+        <div className="flex gap-4">
+          <button 
+            onClick={() => setActiveView('claims')}
+            className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all ${activeView === 'claims' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            Active Claims ({claims.length})
+          </button>
+          <button 
+            onClick={() => setActiveView('disputed')}
+            className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all ${activeView === 'disputed' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            Disputed Batches ({disputedBatches.length})
+          </button>
+        </div>
         <button 
-          onClick={() => setActiveView('claims')}
-          className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all ${activeView === 'claims' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
+          onClick={() => setShowCreateModal(true)}
+          className="mb-4 px-4 py-2 bg-slate-900 text-white rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2"
         >
-          Active Claims ({claims.length})
-        </button>
-        <button 
-          onClick={() => setActiveView('disputed')}
-          className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all ${activeView === 'disputed' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
-        >
-          Disputed Batches ({disputedBatches.length})
+          <Plus size={14} /> Manual Claim
         </button>
       </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-8 py-6 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="font-black text-sm uppercase tracking-widest">Manual Claim Entry</h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-white"><XCircle size={24} /></button>
+            </div>
+            <form onSubmit={handleCreateClaim} className="p-8 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Batch ID</label>
+                <input 
+                  required
+                  type="text"
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold bg-slate-50"
+                  value={newClaimForm.batch_id}
+                  onChange={e => setNewClaimForm({...newClaimForm, batch_id: e.target.value})}
+                  placeholder="e.g. BAT-20240413-123456"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</label>
+                  <select 
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold bg-slate-50"
+                    value={newClaimForm.type}
+                    onChange={e => {
+                      const type = e.target.value as 'Damaged' | 'Dirty';
+                      setNewClaimForm({...newClaimForm, type, amount: type === 'Damaged' ? 150 : 25});
+                    }}
+                  >
+                    <option value="Damaged">Damaged</option>
+                    <option value="Dirty">Dirty</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount (ZAR)</label>
+                  <input 
+                    required
+                    type="number"
+                    className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold bg-slate-50"
+                    value={newClaimForm.amount}
+                    onChange={e => setNewClaimForm({...newClaimForm, amount: parseFloat(e.target.value)})}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Notes</label>
+                <textarea 
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm font-medium bg-slate-50 h-20 resize-none"
+                  value={newClaimForm.notes}
+                  onChange={e => setNewClaimForm({...newClaimForm, notes: e.target.value})}
+                  placeholder="Reason for claim..."
+                />
+              </div>
+              <button 
+                type="submit"
+                className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-100"
+              >
+                Lodge Claim
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {activeView === 'disputed' ? (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -346,6 +465,14 @@ const ClaimsManager: React.FC<ClaimsManagerProps> = ({ isManager }) => {
                 <div className="text-right">
                   <p className="text-xs font-bold text-slate-400 uppercase">Estimated Credit</p>
                   <p className="text-2xl font-bold text-emerald-600">{formatCurrency(selectedClaim.amount_claimed_zar)}</p>
+                  {onNavigate && (
+                    <button 
+                      onClick={() => onNavigate('TRACKER', selectedClaim.batch_id)}
+                      className="mt-2 text-[10px] font-black text-amber-600 uppercase tracking-widest hover:underline flex items-center gap-1 justify-end"
+                    >
+                      View Batch Intelligence <ChevronRight size={10} />
+                    </button>
+                  )}
                 </div>
               </div>
 

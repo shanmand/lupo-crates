@@ -294,10 +294,11 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
 
           // Automated Claim Trigger for Dirty/Damaged assets
           if (condition !== MovementCondition.CLEAN && !isInternal) {
+            const claimId = `CLM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
             const { error: claimError } = await supabase
               .from('claims')
               .insert([{
-                id: `CLM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+                id: claimId,
                 batch_id: targetBatchId,
                 truck_id: truckId,
                 driver_id: driverId,
@@ -306,7 +307,18 @@ const LogisticsOps: React.FC<LogisticsOpsProps> = ({ currentUser, onNavigate, in
                 status: 'Lodged'
               }]);
             
-            if (claimError) console.error("Claim auto-trigger error:", claimError);
+            if (claimError) {
+              console.error("Claim auto-trigger error:", claimError);
+            } else {
+              // Add initial audit log
+              await supabase.from('claim_audits').insert([{
+                claim_id: claimId,
+                status_from: 'None',
+                status_to: 'Lodged',
+                notes: `Automated claim triggered during movement. Condition: ${condition}`,
+                updated_by: 'System'
+              }]);
+            }
           }
         }
 

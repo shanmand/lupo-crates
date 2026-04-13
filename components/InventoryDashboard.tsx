@@ -38,9 +38,10 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
     }
     setIsLoading(true);
     try {
-      const [batchesRes, assetRes, sourcesData] = await Promise.all([
+      const [batchesRes, assetRes, claimsRes, sourcesData] = await Promise.all([
         supabase.from('batches').select('*'),
         supabase.from('asset_master').select('*'),
+        supabase.from('claims').select('*'),
         fetchAllSources()
       ]);
 
@@ -49,6 +50,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
 
       const batches = batchesRes.data || [];
       const assetsData = assetRes.data || [];
+      const claimsData = claimsRes.data || [];
       const uniqueAssetsMap = new Map();
       assetsData.forEach(a => {
         if (!uniqueAssetsMap.has(a.id)) {
@@ -98,6 +100,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
           const asset = assetsData.find(a => a.id === b.asset_id);
           const toLoc = sourcesData.find(s => s.id === b.current_location_id);
           const fromLoc = sourcesData.find(s => s.id === b.origin_location_id);
+          const hasClaim = claimsData.some(c => c.batch_id === b.id);
           
           return {
             batch_id: b.id,
@@ -109,7 +112,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
             from_location_id: b.origin_location_id,
             from_location_name: fromLoc?.name || 'Direct Intake',
             created_at: b.created_at,
-            notes: b.notes
+            notes: b.notes,
+            has_claim: hasClaim
           };
         });
       
@@ -385,7 +389,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = ({ currentUser }) 
                 <tr key={intake.batch_id} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="px-8 py-4">
                     <p className="text-xs font-bold text-slate-900">{new Date(intake.created_at).toLocaleDateString()}</p>
-                    <p className="text-[10px] font-medium text-slate-400">{intake.batch_id}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] font-medium text-slate-400">{intake.batch_id}</p>
+                      {intake.has_claim && (
+                        <span className="bg-amber-100 text-amber-700 text-[8px] px-1 rounded font-black uppercase tracking-widest">Claim</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-8 py-4">
                     <div className="flex items-center gap-2">

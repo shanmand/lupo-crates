@@ -125,6 +125,7 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavItem>(NavItem.DASHBOARD);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('Consolidated');
   const [preselectedStockTakeLocation, setPreselectedStockTakeLocation] = useState<string | undefined>(undefined);
+  const [preselectedBatchId, setPreselectedBatchId] = useState<string | undefined>(undefined);
   const [pendingAssignment, setPendingAssignment] = useState<{customerId: string, assetId: string, quantity: number, requestId: string} | null>(null);
   
   // 1. Check if user is authenticated
@@ -164,7 +165,7 @@ const AppContent: React.FC = () => {
       case NavItem.SUPPLIER_RECON: return <SupplierRecon />;
       case NavItem.PAYMENT_SETTLEMENT: return <PaymentSettlement currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} />;
       case NavItem.ASSETS: return <AssetList currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} isAdmin={profile?.role_name === UserRole.ADMIN} />;
-      case NavItem.TRACKER: return <BatchTracker selectedBranchId={dbBranches.find(b => b.name === currentBranchContext)?.id} />;
+      case NavItem.TRACKER: return <BatchTracker selectedBranchId={dbBranches.find(b => b.name === currentBranchContext)?.id} initialBatchId={preselectedBatchId || undefined} />;
       case NavItem.LOGISTICS: return <LogisticsOps currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} initialCollectionRequest={pendingAssignment || undefined} onNavigate={(tab) => setActiveTab(tab as NavItem)} />;
       case NavItem.COLLECTION_REQUESTS: return (
         <CollectionRequests 
@@ -181,7 +182,7 @@ const AppContent: React.FC = () => {
         />
       );
       case NavItem.LOSSES: return <LossRecorder currentUser={{id: profile?.id || 'dev', name: profile?.full_name || 'Dev', role: profile?.role_name || UserRole.ADMIN, branch_id: profile?.home_branch_name || 'Kya Sands', email: profile?.email || ''}} />;
-      case NavItem.CLAIMS: return <ClaimsManager isManager={profile?.role_name === UserRole.MANAGER || profile?.role_name === UserRole.ADMIN} />;
+      case NavItem.CLAIMS: return <ClaimsManager isManager={profile?.role_name === UserRole.MANAGER || profile?.role_name === UserRole.ADMIN} onNavigate={(tab, batchId) => { if (batchId) setPreselectedBatchId(batchId); setActiveTab(tab as NavItem); }} />;
       case NavItem.SCHEMA: return <SchemaView />;
       case NavItem.USERS: return <UserManagement />;
       case NavItem.LOCATIONS: return <LocationManagement />;
