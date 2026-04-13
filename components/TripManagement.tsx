@@ -265,8 +265,11 @@ const TripManagement: React.FC = () => {
     console.log('Adding stop:', { tripId, locationId });
     setIsAddingStop(true);
     setError(null);
-    const nextSeq = tripStops.length + 1;
+    
     try {
+      // Calculate next sequence number based on current state
+      const nextSeq = tripStops.length + 1;
+      
       const { error } = await supabase.from('trip_stops').insert([{
         trip_id: tripId,
         location_id: locationId,

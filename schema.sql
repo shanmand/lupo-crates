@@ -829,6 +829,8 @@ SELECT
     type,
     category,
     address,
+    latitude,
+    longitude,
     name || ' (' || partner_type || ')' as display_name,
     CASE 
         WHEN partner_type = 'Internal' AND type != 'In Transit' THEN 1 
@@ -846,6 +848,8 @@ SELECT
     'Business Party' as type,
     'External' as category,
     address,
+    NULL::NUMERIC as latitude,
+    NULL::NUMERIC as longitude,
     name || ' (' || party_type || ')' as display_name,
     2 as sort_group,
     'BusinessParty' as source_table
