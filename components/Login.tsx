@@ -97,10 +97,19 @@ const Login: React.FC = () => {
           </button>
         </form>
 
-        <div className="text-center">
+        <div className="text-center space-y-4">
           <p className="text-xs text-slate-500 font-medium">
             &copy; {new Date().getFullYear()} Shuku Logistics. All rights reserved.
           </p>
+          <button 
+            onClick={async () => {
+              await supabase.auth.signOut();
+              window.location.reload();
+            }}
+            className="text-[10px] text-slate-600 hover:text-slate-400 uppercase tracking-widest font-black transition-colors"
+          >
+            Clear Stale Session
+          </button>
         </div>
       </div>
     </div>

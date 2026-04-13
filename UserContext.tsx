@@ -110,7 +110,17 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     // Fix: Using type casting to bypass property missing errors on SupabaseAuthClient in specific environments
-    (supabase.auth as any).getSession().then(({ data: { session } }: any) => {
+    (supabase.auth as any).getSession().then(({ data: { session }, error }: any) => {
+      if (error) {
+        console.error('UserContext: Session Error:', error);
+        // If the refresh token is invalid or not found, clear the session
+        if (error.message?.includes('Refresh Token Not Found') || error.message?.includes('invalid_grant')) {
+          (supabase.auth as any).signOut();
+        }
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
