@@ -120,7 +120,7 @@ enum NavItem {
 
 const AppContent: React.FC = () => {
   console.log('AppContent Rendering...');
-  const { user, profile, isLoading: isUserLoading, logout, hasPermission } = useUser();
+  const { user, profile, isLoading: isUserLoading, isSchemaIncomplete, logout, hasPermission } = useUser();
   const { branches: dbBranches, isLoading: isBranchesLoading } = useBranches();
   const [activeTab, setActiveTab] = useState<NavItem>(NavItem.DASHBOARD);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('Consolidated');
@@ -302,7 +302,28 @@ const AppContent: React.FC = () => {
           </div>
         </header>
 
-        <div className="p-8">{renderContent()}</div>
+        <div className="p-8">
+          {isSchemaIncomplete && (
+            <div className="mb-8 bg-rose-50 border-2 border-rose-200 p-6 rounded-3xl flex items-center justify-between gap-6 animate-in slide-in-from-top duration-500">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-rose-500 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
+                  <Database size={24} />
+                </div>
+                <div>
+                  <h4 className="text-rose-900 font-black text-sm uppercase tracking-tight">Supabase Schema Incomplete</h4>
+                  <p className="text-rose-600 text-xs font-medium">Critical tables like <code className="bg-rose-100 px-1 rounded">role_permissions</code> are missing. The system cannot verify your access levels.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setActiveTab(NavItem.SCHEMA)}
+                className="px-6 py-3 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 shrink-0"
+              >
+                Fix Schema Now
+              </button>
+            </div>
+          )}
+          {renderContent()}
+        </div>
       </main>
     </div>
   );

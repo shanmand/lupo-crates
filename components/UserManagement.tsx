@@ -48,6 +48,7 @@ const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>(isSupabaseConfigured ? [] : MOCK_USERS);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSchemaIncomplete, setIsSchemaIncomplete] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('All Roles');
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
@@ -102,10 +103,21 @@ const UserManagement: React.FC = () => {
       const { data, error } = await supabase
         .from('role_permissions')
         .select('*');
-      if (error) throw error;
-      if (data) setRolePermissions(data);
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('Could not find the table')) {
+          setIsSchemaIncomplete(true);
+        }
+        throw error;
+      }
+      if (data) {
+        setRolePermissions(data);
+        setIsSchemaIncomplete(false);
+      }
     } catch (err: any) {
       console.error("Failed to fetch role permissions:", err);
+      if (err.code === 'PGRST205' || err.message?.includes('Could not find the table')) {
+        setIsSchemaIncomplete(true);
+      }
     }
   };
 
@@ -262,6 +274,12 @@ const UserManagement: React.FC = () => {
           <h3 className="text-2xl font-black text-slate-900 tracking-tight">Access Control</h3>
           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Manage System Access & RBAC Permissions</p>
         </div>
+        {isSchemaIncomplete && (
+          <div className="flex-1 bg-rose-50 border border-rose-100 px-4 py-2 rounded-xl flex items-center gap-3 text-rose-600 animate-pulse">
+            <AlertTriangle size={18} />
+            <p className="text-[10px] font-black uppercase tracking-widest">Schema Incomplete: role_permissions table missing</p>
+          </div>
+        )}
         <div className="flex items-center gap-3 w-full lg:w-auto">
           <div className="flex bg-slate-100 p-1 rounded-xl">
             <button 

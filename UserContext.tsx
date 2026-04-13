@@ -16,6 +16,7 @@ interface UserContextType {
   profile: UserProfile | null;
   permissions: string[];
   isLoading: boolean;
+  isSchemaIncomplete: boolean;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
@@ -28,6 +29,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSchemaIncomplete, setIsSchemaIncomplete] = useState(false);
 
   const refreshProfile = async () => {
     if (user?.id) {
@@ -42,12 +44,20 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .select('permission')
         .eq('role_name', roleName);
       
-      if (error) throw error;
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('Could not find the table')) {
+          setIsSchemaIncomplete(true);
+        }
+        throw error;
+      }
       if (data) {
         setPermissions(data.map((p: any) => p.permission));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching permissions:", err);
+      if (err.code === 'PGRST205' || err.message?.includes('Could not find the table')) {
+        setIsSchemaIncomplete(true);
+      }
       setPermissions([]);
     }
   };
@@ -69,6 +79,9 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (error) {
         console.warn("UserContext: Profile Fetch Error (User likely not in DB yet):", error);
+        if (error.code === 'PGRST205' || error.message?.includes('Could not find the table')) {
+          setIsSchemaIncomplete(true);
+        }
         setProfile(null);
         setPermissions([]);
         setIsLoading(false);
@@ -136,7 +149,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <UserContext.Provider value={{ user, profile, permissions, isLoading, logout, refreshProfile, hasPermission }}>
+    <UserContext.Provider value={{ user, profile, permissions, isLoading, isSchemaIncomplete, logout, refreshProfile, hasPermission }}>
       {children}
     </UserContext.Provider>
   );
