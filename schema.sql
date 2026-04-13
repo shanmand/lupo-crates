@@ -21,6 +21,7 @@ DROP VIEW IF EXISTS public.vw_fleet_compliance_alerts CASCADE;
 DROP VIEW IF EXISTS public.vw_fleet_readiness CASCADE;
 DROP VIEW IF EXISTS public.vw_master_logistics_trace CASCADE;
 
+DROP TABLE IF EXISTS public.batch_verifications CASCADE;
 DROP TABLE IF EXISTS public.stock_take_items CASCADE;
 DROP TABLE IF EXISTS public.stock_takes CASCADE;
 DROP TABLE IF EXISTS public.asset_losses CASCADE;
@@ -67,7 +68,8 @@ BEGIN
                   'is_admin',
                   'check_and_create_supplier',
                   'delete_inventory_batch',
-                  'update_inventory_batch'
+                  'update_inventory_batch',
+                  'fn_on_verification_variance'
               )
                 AND nspname = 'public')
     LOOP
@@ -199,6 +201,17 @@ CREATE TABLE public.asset_losses (
     is_settled BOOLEAN DEFAULT FALSE,
     transaction_date DATE DEFAULT CURRENT_DATE,
     timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.batch_verifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id TEXT REFERENCES public.batches(id),
+    verified_by UUID,
+    received_quantity INT NOT NULL,
+    expected_quantity INT NOT NULL,
+    variance INT NOT NULL,
+    notes TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE TABLE public.role_permissions (
@@ -641,6 +654,22 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ASSET LOSS RECORDING
+CREATE OR REPLACE FUNCTION fn_on_verification_variance() 
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.variance < 0 THEN
+        INSERT INTO public.asset_losses (batch_id, loss_type, lost_quantity, timestamp, reported_by, notes) 
+        VALUES (NEW.batch_id, 'Missing/Lost', ABS(NEW.variance), NOW(), NEW.verified_by, 'System generated: Variance detected during intake verification.');
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tr_on_verification_variance
+AFTER INSERT ON public.batch_verifications
+FOR EACH ROW
+EXECUTE FUNCTION fn_on_verification_variance();
+
 CREATE OR REPLACE FUNCTION process_asset_loss(
     p_batch_id TEXT,
     p_lost_quantity INTEGER,
@@ -1034,7 +1063,7 @@ WITH branch_metrics AS (
         (
             SELECT COALESCE(SUM(al.lost_quantity), 0)
             FROM public.asset_losses al
-            JOIN public.locations l ON al.last_known_location_id = l.id
+            JOIN public.locations l ON al.location_id = l.id
             WHERE l.branch_id = b.id
         ) as lost_units
     FROM public.branches b
@@ -1448,6 +1477,7 @@ ALTER TABLE public.batch_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_takes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_take_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.asset_losses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.batch_verifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trip_stops ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.collection_requests ENABLE ROW LEVEL SECURITY;
@@ -1469,6 +1499,7 @@ CREATE POLICY "Allow all to authenticated" ON public.batch_movements FOR ALL TO 
 CREATE POLICY "Allow all to authenticated" ON public.stock_takes FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.stock_take_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.asset_losses FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all to authenticated" ON public.batch_verifications FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.trips FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.trip_stops FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to authenticated" ON public.collection_requests FOR ALL TO authenticated USING (true) WITH CHECK (true);
@@ -1491,6 +1522,7 @@ CREATE POLICY "Allow all to anon" ON public.batch_movements FOR ALL TO anon USIN
 CREATE POLICY "Allow all to anon" ON public.stock_takes FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.stock_take_items FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.asset_losses FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all to anon" ON public.batch_verifications FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.trips FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.trip_stops FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all to anon" ON public.collection_requests FOR ALL TO anon USING (true) WITH CHECK (true);
