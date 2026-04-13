@@ -214,7 +214,43 @@ CREATE TABLE IF NOT EXISTS public.branches (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Add branch_id to Locations
+-- 2. Create Role Permissions Table
+CREATE TABLE IF NOT EXISTS public.role_permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role_name TEXT NOT NULL,
+    permission TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(role_name, permission)
+);
+
+-- 3. Initial permissions for roles
+INSERT INTO public.role_permissions (role_name, permission) VALUES
+('System Administrator', 'MANAGE_USERS'),
+('System Administrator', 'MANAGE_FEES'),
+('System Administrator', 'WRITE_MOVEMENTS'),
+('System Administrator', 'VIEW_REPORTS'),
+('System Administrator', 'VIEW_DASHBOARD'),
+('Crates Manager', 'WRITE_MOVEMENTS'),
+('Crates Manager', 'VIEW_REPORTS'),
+('Crates Manager', 'VIEW_DASHBOARD'),
+('Dashboard Viewer', 'VIEW_REPORTS'),
+('Dashboard Viewer', 'VIEW_DASHBOARD'),
+('Crates Department', 'VIEW_DASHBOARD')
+ON CONFLICT (role_name, permission) DO NOTHING;
+
+-- 4. Create Users Table
+CREATE TABLE IF NOT EXISTS public.users (
+    id UUID PRIMARY KEY,
+    full_name TEXT,
+    email TEXT UNIQUE,
+    role_name TEXT DEFAULT 'Crates Department',
+    home_branch_name TEXT DEFAULT 'Kya Sands',
+    branch_id TEXT REFERENCES public.branches(id),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. Add branch_id to Locations
 DO $$ 
 BEGIN 
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='locations' AND column_name='branch_id') THEN

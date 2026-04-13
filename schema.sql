@@ -27,6 +27,7 @@ DROP TABLE IF EXISTS public.asset_losses CASCADE;
 DROP TABLE IF EXISTS public.batch_movements CASCADE;
 DROP TABLE IF EXISTS public.batches CASCADE;
 DROP TABLE IF EXISTS public.fee_schedule CASCADE;
+DROP TABLE IF EXISTS public.role_permissions CASCADE;
 DROP TABLE IF EXISTS public.users CASCADE;
 DROP TABLE IF EXISTS public.drivers CASCADE;
 DROP TABLE IF EXISTS public.trucks CASCADE;
@@ -214,9 +215,13 @@ INSERT INTO public.role_permissions (role_name, permission) VALUES
 ('System Administrator', 'MANAGE_FEES'),
 ('System Administrator', 'WRITE_MOVEMENTS'),
 ('System Administrator', 'VIEW_REPORTS'),
+('System Administrator', 'VIEW_DASHBOARD'),
 ('Crates Manager', 'WRITE_MOVEMENTS'),
 ('Crates Manager', 'VIEW_REPORTS'),
-('Executive', 'VIEW_REPORTS');
+('Crates Manager', 'VIEW_DASHBOARD'),
+('Dashboard Viewer', 'VIEW_REPORTS'),
+('Dashboard Viewer', 'VIEW_DASHBOARD'),
+('Crates Department', 'VIEW_DASHBOARD');
 
 CREATE TABLE public.users (
     id UUID PRIMARY KEY,

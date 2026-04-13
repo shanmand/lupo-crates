@@ -4,6 +4,42 @@
 -- 0. Add missing quantity column to batch_movements
 ALTER TABLE public.batch_movements ADD COLUMN IF NOT EXISTS quantity INTEGER;
 
+-- 0.1 Create Role Permissions Table
+CREATE TABLE IF NOT EXISTS public.role_permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role_name TEXT NOT NULL,
+    permission TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(role_name, permission)
+);
+
+-- 0.2 Initial permissions for roles
+INSERT INTO public.role_permissions (role_name, permission) VALUES
+('System Administrator', 'MANAGE_USERS'),
+('System Administrator', 'MANAGE_FEES'),
+('System Administrator', 'WRITE_MOVEMENTS'),
+('System Administrator', 'VIEW_REPORTS'),
+('System Administrator', 'VIEW_DASHBOARD'),
+('Crates Manager', 'WRITE_MOVEMENTS'),
+('Crates Manager', 'VIEW_REPORTS'),
+('Crates Manager', 'VIEW_DASHBOARD'),
+('Dashboard Viewer', 'VIEW_REPORTS'),
+('Dashboard Viewer', 'VIEW_DASHBOARD'),
+('Crates Department', 'VIEW_DASHBOARD')
+ON CONFLICT (role_name, permission) DO NOTHING;
+
+-- 0.3 Create Users Table
+CREATE TABLE IF NOT EXISTS public.users (
+    id UUID PRIMARY KEY,
+    full_name TEXT,
+    email TEXT UNIQUE,
+    role_name TEXT DEFAULT 'Crates Department',
+    home_branch_name TEXT DEFAULT 'Kya Sands',
+    branch_id TEXT REFERENCES public.branches(id),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Add license_doc_url to trucks and drivers
 ALTER TABLE public.trucks ADD COLUMN IF NOT EXISTS license_doc_url TEXT;
 ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS license_doc_url TEXT;
