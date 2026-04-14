@@ -964,33 +964,60 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     -- 1. Rental Accruals (Outstanding)
-    -- Logic: (p_end_date - batch_arrival_date) * daily_fee_amount * quantity
+    -- Logic: Sum of daily rentals for each active fee phase within the batch's life
+    RETURN QUERY
+    WITH BatchPhases AS (
+        SELECT 
+            b.id as b_id,
+            am.name as a_name,
+            b.quantity as b_qty,
+            fs.amount_zar as phase_rate,
+            GREATEST(b.transaction_date::timestamp, fs.effective_from::timestamp) as phase_start,
+            LEAST(p_end_date::timestamp, COALESCE(fs.effective_to::timestamp, '9999-12-31'::timestamp)) as phase_end
+        FROM public.batches b
+        JOIN public.asset_master am ON b.asset_id = am.id
+        JOIN public.fee_schedule fs ON am.id = fs.asset_id
+        WHERE am.supplier_id::text = p_supplier_id
+          AND b.is_settled = FALSE
+          AND fs.fee_type ILIKE '%Daily Rental%'
+          AND fs.is_active = TRUE
+          AND b.transaction_date <= p_end_date
+    )
+    SELECT 
+        b_id,
+        a_name,
+        SUM(EXTRACT(DAY FROM (phase_end - phase_start)))::INTEGER as days,
+        SUM(EXTRACT(DAY FROM (phase_end - phase_start)) * phase_rate * b_qty)::NUMERIC as amount_zar,
+        'Rental'::TEXT as liability_type
+    FROM BatchPhases
+    WHERE phase_end > phase_start
+    GROUP BY b_id, a_name;
+
+    -- 2. Issue Fees (One-time fee per unit)
     RETURN QUERY
     SELECT 
         b.id as batch_id,
         am.name as asset_name,
-        GREATEST(0, (p_end_date - b.transaction_date))::INTEGER as days,
-        COALESCE(
-            (GREATEST(0, (p_end_date - b.transaction_date))::NUMERIC * fs.amount_zar * b.quantity),
-            0
-        )::NUMERIC as amount_zar,
-        'Rental'::TEXT as liability_type
+        0 as days,
+        (fs.amount_zar * b.quantity)::NUMERIC as amount_zar,
+        'Issue Fee'::TEXT as liability_type
     FROM public.batches b
     JOIN public.asset_master am ON b.asset_id = am.id
     JOIN public.fee_schedule fs ON am.id = fs.asset_id
     WHERE am.supplier_id::text = p_supplier_id
       AND b.is_settled = FALSE
-      AND fs.fee_type ILIKE '%Daily Rental%'
-      AND fs.effective_to IS NULL
+      AND fs.fee_type ILIKE '%Issue Fee%'
+      AND fs.is_active = TRUE
+      AND fs.effective_from <= b.transaction_date
       AND b.transaction_date <= p_end_date;
 
-    -- 2. Asset Losses (Outstanding)
+    -- 3. Asset Losses (Outstanding)
     RETURN QUERY
     SELECT 
         al.batch_id,
         am.name as asset_name,
         0 as days,
-        COALESCE((al.lost_quantity * fs.amount_zar), 0)::NUMERIC as amount_zar,
+        (al.lost_quantity * fs.amount_zar)::NUMERIC as amount_zar,
         'Loss'::TEXT as liability_type
     FROM public.asset_losses al
     JOIN public.batches b ON al.batch_id = b.id
@@ -999,7 +1026,8 @@ BEGIN
     WHERE am.supplier_id::text = p_supplier_id
       AND al.is_settled = FALSE
       AND fs.fee_type ILIKE '%Replacement Fee%'
-      AND fs.effective_to IS NULL
+      AND fs.is_active = TRUE
+      AND fs.effective_to IS NULL -- Current replacement cost for unsettled losses
       AND al.transaction_date <= p_end_date;
 
     -- 3. Penalties (Missing THAAN on Return)

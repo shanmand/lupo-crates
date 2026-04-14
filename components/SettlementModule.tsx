@@ -235,6 +235,7 @@ const SettlementModule: React.FC<SettlementModuleProps> = ({ currentUser }) => {
                               <td className="py-4">
                                 <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
                                   batch.liability_type === 'Rental' ? 'bg-blue-100 text-blue-700' :
+                                  batch.liability_type === 'Issue Fee' ? 'bg-indigo-100 text-indigo-700' :
                                   batch.liability_type === 'Loss' ? 'bg-amber-100 text-amber-700' :
                                   batch.liability_type === 'Penalty' ? 'bg-rose-100 text-rose-700' :
                                   'bg-emerald-100 text-emerald-700'
